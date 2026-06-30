@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug STM32",
+      "type": "cortex-debug",
+      "request": "launch",
+      "servertype": "stlink",
+      "stlinkPath": "C:\\ST\\STM32CubeCLT_1.21.0\\STLink-gdb-server\\bin\\ST-LINK_gdbserver.exe",
+      "stm32cubeprogrammer": "C:/ST/STM32CubeCLT_1.21.0/STM32CubeProgrammer/bin",
+      "configFiles": [
+        "interface/stlink.cfg",
+        "target/stm32l4x.cfg"
+      ],
+      "executable": "build/debug/smart-watch.elf",
+      "runToEntryPoint": "main",
+      "showDevDebugOutput": "none"
+    }
+  ]
+}
