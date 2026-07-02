@@ -54,6 +54,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
     # Add user defined include paths
     ${CMAKE_SOURCE_DIR}/lib/ST7789-STM32/ST7789
+    ${CMAKE_SOURCE_DIR}/Core/Src/drivers
 )
 
 # Add project symbols (macros)
