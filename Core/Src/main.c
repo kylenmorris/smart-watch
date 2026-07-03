@@ -143,6 +143,98 @@ int main(void)
   }
 }
 
+/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void *argument)
+{
+  uint8_t i = 0;
+  char buffer[100];
+
+  /* USER CODE BEGIN 5 */
+  for (uint8_t a = 1; a < 128; a++) {
+    if (HAL_I2C_IsDeviceReady(&hi2c1, a << 1, 2, 10) == HAL_OK) {
+      snprintf(buffer, sizeof(buffer), "Found device: 0x%02X\n", a);
+      printf(buffer);
+      ST7789_WriteString(10, (20 * i) + 10, buffer, Font_11x18, BLUE, WHITE);
+      i++;
+    }
+  }
+
+  HAL_Delay(2000);
+  ST7789_Fill_Color(BLACK);
+
+  uint8_t accel_init_data = 0x10;
+  HAL_StatusTypeDef init_status = HAL_I2C_Mem_Write(&hi2c1, ACCEL_ADDRESS << 1, CTRL1_XL, I2C_MEMADD_SIZE_8BIT, &accel_init_data, 1, 10);
+
+  if (init_status != HAL_OK) {
+      printf("Error initializing accelerometer: %d\n", init_status);
+  } else {
+      printf("Accelerometer initialized successfully.\n");
+  }
+
+  // ST7789_Test();
+
+  /* Infinite loop */
+  for (;;)
+  {
+
+    uint8_t encoder_data[4];
+    uint16_t encoder_reg = ((uint16_t)0x11 << 8) | (uint16_t)0x30;
+
+    HAL_StatusTypeDef encoder_status = HAL_I2C_Mem_Read(&hi2c1, 0x36 << 1, 
+      encoder_reg, I2C_MEMADD_SIZE_16BIT, encoder_data, 4, HAL_MAX_DELAY);
+
+    if (encoder_status != HAL_OK) {
+        printf("Error reading encoder data: %d\n", encoder_status);
+        osDelay(100);
+        continue;
+    }
+
+    uint32_t encoder_value = ((uint32_t)encoder_data[0] << 24) | ((uint32_t)encoder_data[1] << 16) |
+                         ((uint32_t)encoder_data[2] << 8) | (uint32_t)encoder_data[3];
+
+    snprintf(buffer, sizeof(buffer), "Encoder Value: %lu", encoder_value);
+    ST7789_WriteString(10, 110, buffer, Font_11x18, BLUE, WHITE);
+
+    uint8_t accel_data[6];
+    uint8_t num_bytes = 6;
+
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(&hi2c1, ACCEL_ADDRESS << 1,
+                OUTX_L_A, I2C_MEMADD_SIZE_8BIT,
+                  accel_data, num_bytes, HAL_MAX_DELAY);
+
+    if (status != HAL_OK) {
+        printf("Error reading accelerometer data: %d\n", status);
+        osDelay(100);
+        continue;
+    }
+
+    int accel_g_scale = 2;
+    int accel_bits_precision = 16;
+
+    float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
+
+    char buffer[3][100];
+
+    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
+    int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
+    int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
+
+    snprintf(buffer[0], sizeof(buffer[0]), "X: %5d", x);
+    snprintf(buffer[1], sizeof(buffer[1]), "Y: %5d", y);
+    snprintf(buffer[2], sizeof(buffer[2]), "Z: %5d", z);
+
+    // ST7789_Fill_Color(BLACK);
+    ST7789_WriteString(10, 10, "Accelerometer Data", Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 30, buffer[0], Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 50, buffer[1], Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 70, buffer[2], Font_11x18, BLUE, WHITE);
+
+    osDelay(100);
+  }
+  /* USER CODE END 5 */
+}
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -438,65 +530,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  /* USER CODE BEGIN 5 */
-  for (uint8_t a = 1; a < 128; a++) {
-    if (HAL_I2C_IsDeviceReady(&hi2c1, a << 1, 2, 10) == HAL_OK)
-        printf("Found device at 0x%02X\n", a);
-  }
-
-  uint8_t accel_init_data = 0x10;
-  HAL_StatusTypeDef init_status = HAL_I2C_Mem_Write(&hi2c1, ACCEL_ADDRESS << 1, CTRL1_XL, I2C_MEMADD_SIZE_8BIT, &accel_init_data, 1, 10);
-
-  if (init_status != HAL_OK) {
-      printf("Error initializing accelerometer: %d\n", init_status);
-  } else {
-      printf("Accelerometer initialized successfully.\n");
-  }
-
-  // ST7789_Test();
-
-  /* Infinite loop */
-  for (;;)
-  {
-    uint8_t accel_data[6];
-    uint8_t num_bytes = 6;
-
-    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(&hi2c1, ACCEL_ADDRESS << 1,
-                OUTX_L_A, I2C_MEMADD_SIZE_8BIT,
-                  accel_data, num_bytes, HAL_MAX_DELAY);
-
-    if (status != HAL_OK) {
-        printf("Error reading accelerometer data: %d\n", status);
-        osDelay(100);
-        continue;
-    }
-
-    int accel_g_scale = 2;
-    int accel_bits_precision = 16;
-
-    float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
-
-    char buffer[100];
-
-    int16_t x = (((int16_t)accel_data[1] << 8) | (int16_t)accel_data[0]) * accel_scale_mg;
-    int16_t y = (((int16_t)accel_data[3] << 8) | (int16_t)accel_data[2]) * accel_scale_mg;
-    int16_t z = (((int16_t)accel_data[5] << 8) | (int16_t)accel_data[4]) * accel_scale_mg;
-
-    snprintf(buffer, sizeof(buffer), "Accel: %d, %d, %d", x, y, z);
-
-    printf("%s\n", buffer);
-
-    ST7789_Fill_Color(BLACK);
-    ST7789_WriteString(10, 30, buffer, Font_11x18, BLUE, WHITE);
-
-    osDelay(100);
-  }
-  /* USER CODE END 5 */
-}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
