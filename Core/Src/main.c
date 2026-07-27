@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include "st7789.h"
 #include "LSM6DSO.h"
+#include "seesaw_driver.h"
+#include "stm32l4xx_hal_def.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -17,6 +19,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define TIMEOUT 100
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +44,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
+volatile uint8_t accel_interrupt_flag; 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -58,7 +62,6 @@ void StartDefaultTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define ACCEL_ADDRESS 0x6B
 
 #ifdef __GNUC__
 #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
@@ -138,101 +141,16 @@ int main(void)
   osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
-  while (1)
-  {
-  }
-}
-
-/* USER CODE BEGIN Header_StartDefaultTask */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  uint8_t i = 0;
-  char buffer[100];
-
-  /* USER CODE BEGIN 5 */
-  for (uint8_t a = 1; a < 128; a++) {
-    if (HAL_I2C_IsDeviceReady(&hi2c1, a << 1, 2, 10) == HAL_OK) {
-      snprintf(buffer, sizeof(buffer), "Found device: 0x%02X\n", a);
-      printf(buffer);
-      ST7789_WriteString(10, (20 * i) + 10, buffer, Font_11x18, BLUE, WHITE);
-      i++;
-    }
-  }
-
-  HAL_Delay(2000);
-  ST7789_Fill_Color(BLACK);
-
-  uint8_t accel_init_data = 0x10;
-  HAL_StatusTypeDef init_status = HAL_I2C_Mem_Write(&hi2c1, ACCEL_ADDRESS << 1, CTRL1_XL, I2C_MEMADD_SIZE_8BIT, &accel_init_data, 1, 10);
-
-  if (init_status != HAL_OK) {
-      printf("Error initializing accelerometer: %d\n", init_status);
-  } else {
-      printf("Accelerometer initialized successfully.\n");
-  }
-
-  // ST7789_Test();
 
   /* Infinite loop */
-  for (;;)
+  /* USER CODE BEGIN WHILE */
+  while (1)
   {
+    /* USER CODE END WHILE */
 
-    uint8_t encoder_data[4];
-    uint16_t encoder_reg = ((uint16_t)0x11 << 8) | (uint16_t)0x30;
-
-    HAL_StatusTypeDef encoder_status = HAL_I2C_Mem_Read(&hi2c1, 0x36 << 1, 
-      encoder_reg, I2C_MEMADD_SIZE_16BIT, encoder_data, 4, HAL_MAX_DELAY);
-
-    if (encoder_status != HAL_OK) {
-        printf("Error reading encoder data: %d\n", encoder_status);
-        osDelay(100);
-        continue;
-    }
-
-    uint32_t encoder_value = ((uint32_t)encoder_data[0] << 24) | ((uint32_t)encoder_data[1] << 16) |
-                         ((uint32_t)encoder_data[2] << 8) | (uint32_t)encoder_data[3];
-
-    snprintf(buffer, sizeof(buffer), "Encoder Value: %lu", encoder_value);
-    ST7789_WriteString(10, 110, buffer, Font_11x18, BLUE, WHITE);
-
-    uint8_t accel_data[6];
-    uint8_t num_bytes = 6;
-
-    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(&hi2c1, ACCEL_ADDRESS << 1,
-                OUTX_L_A, I2C_MEMADD_SIZE_8BIT,
-                  accel_data, num_bytes, HAL_MAX_DELAY);
-
-    if (status != HAL_OK) {
-        printf("Error reading accelerometer data: %d\n", status);
-        osDelay(100);
-        continue;
-    }
-
-    int accel_g_scale = 2;
-    int accel_bits_precision = 16;
-
-    float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
-
-    char buffer[3][100];
-
-    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
-    int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
-    int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
-
-    snprintf(buffer[0], sizeof(buffer[0]), "X: %5d", x);
-    snprintf(buffer[1], sizeof(buffer[1]), "Y: %5d", y);
-    snprintf(buffer[2], sizeof(buffer[2]), "Z: %5d", z);
-
-    // ST7789_Fill_Color(BLACK);
-    ST7789_WriteString(10, 10, "Accelerometer Data", Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 30, buffer[0], Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 50, buffer[1], Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 70, buffer[2], Font_11x18, BLUE, WHITE);
-
-    osDelay(100);
+    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 5 */
+  /* USER CODE END 3 */
 }
 
 /**
@@ -418,7 +336,7 @@ static void MX_SPI1_Init(void)
   /* SPI1 parameter configuration*/
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.Direction = SPI_DIRECTION_1LINE;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
@@ -523,13 +441,266 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : ACCEL_INT1_Pin */
+  GPIO_InitStruct.Pin = ACCEL_INT1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(ACCEL_INT1_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == ACCEL_INT1_Pin) {          // only runs once pending bit confirmed (fixes #2)
+    accel_interrupt_flag = 1;
+  }
+}
+
+void write_to_accel(I2C_HandleTypeDef *hi2c, uint8_t reg, uint8_t *data, uint16_t size) {
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Write(hi2c, ACCEL_ADDRESS << 1, reg, I2C_MEMADD_SIZE_8BIT, data, size, TIMEOUT);
+    if (status != HAL_OK) {
+        printf("Error writing to accelerometer register 0x%02X: %d\n", reg, status);
+    }
+}
+
+void read_from_accel(I2C_HandleTypeDef *hi2c, uint8_t reg, uint8_t *data, uint16_t size) {
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(hi2c, ACCEL_ADDRESS << 1, reg, I2C_MEMADD_SIZE_8BIT, data, size, TIMEOUT);
+    if (status != HAL_OK) {
+        printf("Error reading from accelerometer register 0x%02X: %d\n", reg, status);
+    }
+}
+
+void read_from_encoder(I2C_HandleTypeDef *hi2c, uint16_t reg, uint8_t *data, uint16_t size) {
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(hi2c, SEESAW_I2C_ADDRESS << 1, reg, I2C_MEMADD_SIZE_16BIT, data, size, TIMEOUT);
+    if (status != HAL_OK) {
+        printf("Error reading from encoder register 0x%04X: %d\n", reg, status);
+    }
+}
+
 /* USER CODE END 4 */
 
+/* USER CODE BEGIN Tasks */
+
+// void EncoderInterruptTask(void *argument) {
+//   while (1) {
+//     if (accel_interrupt_flag) {
+//       accel_interrupt_flag = 0;
+//       printf("Accelerometer interrupt detected!\n");
+//     }
+//     osDelay(10);
+//   }
+// }
+
+typedef enum {
+  STATE_WATCH,
+  STATE_CHRONO,
+  STATE_GAME
+} SystemState;
+
+void SystemStateTask(void *argument) {
+
+  SystemState current_state = STATE_WATCH;
+
+  for (;;) {
+
+    switch (current_state) {
+      case STATE_WATCH:
+        // Handle watch state
+        break;
+      case STATE_CHRONO:
+        // Handle chronograph state
+        break;
+      case STATE_GAME:
+        // Handle game state
+        break;
+    }
+
+    osDelay(100);
+  }
+}
+
+void ChronoTask(void *argument) {
+
+  for (;;) {
+    // Handle chronograph functionality
+    osDelay(100);
+  }
+}
+
+void AccelerometerReadTask(void *argument) {
+
+  for (;;) {
+    uint8_t accel_data[6];
+    uint8_t num_bytes = 6;
+
+    int accel_g_scale = 2;
+    int accel_bits_precision = 16;
+    float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
+
+    read_from_accel(&hi2c1, OUTX_L_A, accel_data, num_bytes);
+
+    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
+    int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
+    int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
+    
+    osDelay(100);
+  }
+}
+
+void DisplayWriteTask(void *argument) {
+
+  for (;;) {
+
+    snprintf(encoder_value_buffer, sizeof(encoder_value_buffer), "Value: %9ld", encoder_value);
+    snprintf(encoder_delta_buffer, sizeof(encoder_delta_buffer), "Delta: %9ld", encoder_delta);
+
+    snprintf(accel_buffer[0], sizeof(accel_buffer[0]), "X: %5d", x);
+    snprintf(accel_buffer[1], sizeof(accel_buffer[1]), "Y: %5d", y);
+    snprintf(accel_buffer[2], sizeof(accel_buffer[2]), "Z: %5d", z);
+
+    ST7789_WriteString(10, 10, "Accelerometer Data", Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 30, accel_buffer[0], Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 50, accel_buffer[1], Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 70, accel_buffer[2], Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 110, encoder_delta_buffer, Font_11x18, BLUE, WHITE);
+    ST7789_WriteString(10, 130, encoder_value_buffer, Font_11x18, BLUE, WHITE);
+
+    osDelay(100);
+
+  }
+}
+
+void EncoderReadTask(void *argument) {
+
+  for (;;) {
+
+    uint8_t encoder_data[4];
+    uint8_t encoder_delta_data[4];
+
+    uint16_t encoder_reg = ((uint16_t)SEESAW_ENCODER_BASE << 8) | (uint16_t)SEESAW_ENCODER_POSITION;
+    uint16_t encoder_delta_reg = ((uint16_t)SEESAW_ENCODER_BASE << 8) | (uint16_t)SEESAW_ENCODER_DELTA;
+
+    read_from_encoder(&hi2c1, encoder_reg, encoder_data, 4);
+    read_from_encoder(&hi2c1, encoder_delta_reg, encoder_delta_data, 4);
+
+    int32_t encoder_value = ((int32_t)encoder_data[0] << 24) | ((int32_t)encoder_data[1] << 16) | ((int32_t)encoder_data[2] << 8) | (int32_t)encoder_data[3];
+    int32_t encoder_delta = ((int32_t)encoder_delta_data[0] << 24) | ((int32_t)encoder_delta_data[1] << 16) | ((int32_t)encoder_delta_data[2] << 8) | (int32_t)encoder_delta_data[3];
+
+
+    osDelay(100);
+
+  }
+
+}
+/* USER CODE END Tasks */
+
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+
+void InitEncoder(void) {
+
+  // set encoder to 0
+  uint16_t encoder_position_reg = ((uint16_t)SEESAW_ENCODER_BASE << 8) | (uint16_t)SEESAW_ENCODER_POSITION;
+  uint8_t encoder_position = 0;
+
+  HAL_StatusTypeDef encoder_status = HAL_I2C_Mem_Write(&hi2c1, SEESAW_I2C_ADDRESS << 1, 
+    encoder_position_reg, I2C_MEMADD_SIZE_16BIT, &encoder_position, 1, HAL_MAX_DELAY);
+  if (encoder_status != HAL_OK) { printf("Error setting encoder position: %d\n", encoder_status); }
+
+}
+
+void InitAccelerometer(void) {
+  
+  uint8_t accel_init_data = 0x40; // 104 kHz, 2g
+  uint16_t reg = CTRL1_XL;
+  write_to_accel(&hi2c1, reg, &accel_init_data, 1);
+
+  uint8_t tap_init_data = 0x08; // enable double-tap detection on int2
+  reg = MD2_CFG;
+  write_to_accel(&hi2c1, reg, &tap_init_data, 1);
+
+  uint8_t tap_dir = 0x02; // z axis
+  reg = TAP_CFG0;
+  write_to_accel(&hi2c1, reg, &tap_dir, 1);
+
+  uint8_t tap_ths = 0x80; // enable interrupts
+  reg = TAP_CFG2;
+  write_to_accel(&hi2c1, reg, &tap_ths, 1);
+
+  uint8_t tap_dur2 = 0x10; 
+  reg = TAP_THS_6D;
+  write_to_accel(&hi2c1, reg, &tap_dur2, 1);
+
+  uint8_t tap_en = 0x80; // enable double-tap detection
+  reg = WAKE_UP_THS;
+  write_to_accel(&hi2c1, reg, &tap_en, 1);
+
+  uint8_t tap_dur = 0x2A; // ~600ms double tap delay, 2 quiet, 2 shock
+  reg = INT_DUR2;
+  write_to_accel(&hi2c1, reg, &tap_dur, 1);
+
+}
+
+void PollI2CDevices(void) {
+
+  uint8_t i = 0;
+  char buffer[100];
+  // Scan the I2C bus for any connected devices
+  for (uint8_t a = 1; a < 128; a++) {
+    if (HAL_I2C_IsDeviceReady(&hi2c1, a << 1, 2, 10) == HAL_OK) {
+      snprintf(buffer, sizeof(buffer), "Found device: 0x%02X\n", a);
+      printf(buffer);
+      ST7789_WriteString(10, (20 * i) + 10, buffer, Font_11x18, BLUE, WHITE);
+      i++;
+    }
+  }
+ 
+}
+
+void StartDefaultTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  // uint8_t i = 0;
+  // char buffer[100];
+  // char encoder_delta_buffer[100];
+  // char encoder_value_buffer[100];
+  // char accel_buffer[3][100];
+  
+  ST7789_Fill_Color(BLACK);
+
+  PollI2CDevices();
+
+  InitAccelerometer();
+  InitEncoder();
+
+  osThreadNew(AccelerometerReadTask, NULL, NULL);
+  osThreadNew(EncoderReadTask, NULL, NULL);
+  osThreadNew(DisplayWriteTask, NULL, NULL);
+  osThreadNew(SystemStateTask, NULL, NULL);
+  osThreadNew(ChronoTask, NULL, NULL);
+  // osThreadNew(GameTask, NULL, NULL);
+
+  printf("Initialization complete. Entering main loop...\n");
+
+  osThreadStop(defaultTaskHandle); // Stop the default task after initialization
+
+  /* Infinite loop */
+  for (;;)
+  {
+    // ST7789_Fill_Color(BLACK);
+
+    // osDelay(100);
+  }
+  /* USER CODE END 5 */
+}
+/* USER CODE END Header_StartDefaultTask */
 
 /**
   * @brief  Period elapsed callback in non blocking mode

@@ -3,6 +3,8 @@
 
 enum LSM6DSO_REGISTERS {
 
+  ACCEL_ADDRESS          = 0x6B,
+
   FUNC_CFG_ACCESS        = 0x01,  
   LSM6DO_PIN_CTRL        = 0x02, 
 

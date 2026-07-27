@@ -41,7 +41,7 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-
+extern volatile uint8_t accel_interrupt_flag;
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
@@ -65,6 +65,9 @@ void Error_Handler(void);
 #define ST7789_RST_GPIO_Port GPIOA
 #define ST7789_DC_Pin GPIO_PIN_0
 #define ST7789_DC_GPIO_Port GPIOB
+#define ACCEL_INT1_Pin GPIO_PIN_8
+#define ACCEL_INT1_GPIO_Port GPIOA
+#define ACCEL_INT1_EXTI_IRQn EXTI9_5_IRQn
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
