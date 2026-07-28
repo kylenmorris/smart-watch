@@ -44,18 +44,20 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
-    ${CMAKE_SOURCE_DIR}/lib/ST7789-STM32/ST7789/st7789.c
-    ${CMAKE_SOURCE_DIR}/lib/ST7789-STM32/ST7789/fonts.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/gc9a01.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/font8.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/font12.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/font16.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/font20.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/font24.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
     # Add user defined include paths
-    ${CMAKE_SOURCE_DIR}/lib/ST7789-STM32/ST7789
     ${CMAKE_SOURCE_DIR}/Core/Src/drivers
-)
+    )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE

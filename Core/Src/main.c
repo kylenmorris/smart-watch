@@ -7,10 +7,15 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
-#include "st7789.h"
+// #include "st7789.h"
 #include "LSM6DSO.h"
 #include "seesaw_driver.h"
 #include "stm32l4xx_hal_def.h"
+#include "GC9A01.h"
+#include "fonts.h"
+#include "math.h"
+#include "string.h"
+#include "stdlib.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,20 +36,18 @@ I2C_HandleTypeDef hi2c1;
 
 RTC_HandleTypeDef hrtc;
 
-SPI_HandleTypeDef hspi1;
-DMA_HandleTypeDef hdma_spi1_tx;
-
 UART_HandleTypeDef huart2;
 
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 512 * 4,
+  .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
 volatile uint8_t accel_interrupt_flag; 
+extern volatile uint8_t dma_spi_fl1 = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,7 +112,24 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  ST7789_Init();							
+  // ST7789_Init();							
+
+  /* USER CODE BEGIN Init */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+
+  NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
+  NVIC_SetPriority(SysTick_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 15, 0));
+  /* USER CODE END Init */
+
+  LL_DMA_DisableChannel(DMA_NO, DMA_CHANNEL);
+  LL_DMA_ClearFlag_TC(DMA_NO);
+  LL_DMA_ClearFlag_TE(DMA_NO);
+  LL_DMA_EnableIT_TC(DMA_NO, DMA_CHANNEL);
+  LL_DMA_EnableIT_TE(DMA_NO, DMA_CHANNEL);
+  LL_SPI_EnableDMAReq_TX(SPI_NO);
+  LL_SPI_Enable(SPI_NO);
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -331,27 +351,61 @@ static void MX_SPI1_Init(void)
   /* USER CODE BEGIN SPI1_Init 0 */
   /* USER CODE END SPI1_Init 0 */
 
+  LL_SPI_InitTypeDef SPI_InitStruct = {0};
+
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* Peripheral clock enable */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SPI1);
+
+  LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOA);
+  /**SPI1 GPIO Configuration
+  PA1   ------> SPI1_SCK
+  PA12   ------> SPI1_MOSI
+  */
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_1|LL_GPIO_PIN_12;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
+  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* SPI1 DMA Init */
+
+  /* SPI1_TX Init */
+  LL_DMA_SetPeriphRequest(DMA2, LL_DMA_CHANNEL_4, LL_DMA_REQUEST_4);
+
+  LL_DMA_SetDataTransferDirection(DMA2, LL_DMA_CHANNEL_4, LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
+
+  LL_DMA_SetChannelPriorityLevel(DMA2, LL_DMA_CHANNEL_4, LL_DMA_PRIORITY_MEDIUM);
+
+  LL_DMA_SetMode(DMA2, LL_DMA_CHANNEL_4, LL_DMA_MODE_NORMAL);
+
+  LL_DMA_SetPeriphIncMode(DMA2, LL_DMA_CHANNEL_4, LL_DMA_PERIPH_NOINCREMENT);
+
+  LL_DMA_SetMemoryIncMode(DMA2, LL_DMA_CHANNEL_4, LL_DMA_MEMORY_INCREMENT);
+
+  LL_DMA_SetPeriphSize(DMA2, LL_DMA_CHANNEL_4, LL_DMA_PDATAALIGN_BYTE);
+
+  LL_DMA_SetMemorySize(DMA2, LL_DMA_CHANNEL_4, LL_DMA_MDATAALIGN_BYTE);
+
   /* USER CODE BEGIN SPI1_Init 1 */
   /* USER CODE END SPI1_Init 1 */
   /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_1LINE;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 7;
-  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  SPI_InitStruct.TransferDirection = LL_SPI_FULL_DUPLEX;
+  SPI_InitStruct.Mode = LL_SPI_MODE_MASTER;
+  SPI_InitStruct.DataWidth = LL_SPI_DATAWIDTH_8BIT;
+  SPI_InitStruct.ClockPolarity = LL_SPI_POLARITY_HIGH;
+  SPI_InitStruct.ClockPhase = LL_SPI_PHASE_1EDGE;
+  SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
+  SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV2;
+  SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
+  SPI_InitStruct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
+  SPI_InitStruct.CRCPoly = 7;
+  LL_SPI_Init(SPI1, &SPI_InitStruct);
+  LL_SPI_SetStandard(SPI1, LL_SPI_PROTOCOL_MOTOROLA);
+  LL_SPI_EnableNSSPulseMgt(SPI1);
   /* USER CODE BEGIN SPI1_Init 2 */
   /* USER CODE END SPI1_Init 2 */
 
@@ -396,12 +450,12 @@ static void MX_DMA_Init(void)
 {
 
   /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
+  __HAL_RCC_DMA2_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA2_Channel4_IRQn interrupt configuration */
+  NVIC_SetPriority(DMA2_Channel4_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5, 0));
+  NVIC_EnableIRQ(DMA2_Channel4_IRQn);
 
 }
 
@@ -422,17 +476,17 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ST7789_RST_GPIO_Port, ST7789_RST_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, DISP_CS_Pin|ST7789_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, ST7789_DC_Pin|LD3_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : ST7789_RST_Pin */
-  GPIO_InitStruct.Pin = ST7789_RST_Pin;
+  /*Configure GPIO pins : DISP_CS_Pin ST7789_RST_Pin */
+  GPIO_InitStruct.Pin = DISP_CS_Pin|ST7789_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(ST7789_RST_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ST7789_DC_Pin LD3_Pin */
   GPIO_InitStruct.Pin = ST7789_DC_Pin|LD3_Pin;
@@ -486,7 +540,6 @@ void read_from_encoder(I2C_HandleTypeDef *hi2c, uint16_t reg, uint8_t *data, uin
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Tasks */
 
 // void EncoderInterruptTask(void *argument) {
 //   while (1) {
@@ -540,16 +593,21 @@ void AccelerometerReadTask(void *argument) {
     uint8_t accel_data[6];
     uint8_t num_bytes = 6;
 
-    int accel_g_scale = 2;
-    int accel_bits_precision = 16;
-    float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
+    // int accel_g_scale = 2;
+    // int accel_bits_precision = 16;
+    // float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
 
     read_from_accel(&hi2c1, OUTX_L_A, accel_data, num_bytes);
 
-    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
-    int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
-    int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
+    // int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
+    // int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
+    // int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
     
+    // GC9A01_WriteString(10, 10, "Accelerometer Data", Font_11x18, BLUE, WHITE);
+    // GC9A01_WriteString(10, 30, accel_buffer[0], Font_11x18, BLUE, WHITE);
+    // GC9A01_WriteString(10, 50, accel_buffer[1], Font_11x18, BLUE, WHITE);
+    // GC9A01_WriteString(10, 70, accel_buffer[2], Font_11x18, BLUE, WHITE);
+
     osDelay(100);
   }
 }
@@ -558,19 +616,19 @@ void DisplayWriteTask(void *argument) {
 
   for (;;) {
 
-    snprintf(encoder_value_buffer, sizeof(encoder_value_buffer), "Value: %9ld", encoder_value);
-    snprintf(encoder_delta_buffer, sizeof(encoder_delta_buffer), "Delta: %9ld", encoder_delta);
+    // snprintf(encoder_value_buffer, sizeof(encoder_value_buffer), "Value: %9ld", encoder_value);
+    // snprintf(encoder_delta_buffer, sizeof(encoder_delta_buffer), "Delta: %9ld", encoder_delta);
 
-    snprintf(accel_buffer[0], sizeof(accel_buffer[0]), "X: %5d", x);
-    snprintf(accel_buffer[1], sizeof(accel_buffer[1]), "Y: %5d", y);
-    snprintf(accel_buffer[2], sizeof(accel_buffer[2]), "Z: %5d", z);
+    // snprintf(accel_buffer[0], sizeof(accel_buffer[0]), "X: %5d", x);
+    // snprintf(accel_buffer[1], sizeof(accel_buffer[1]), "Y: %5d", y);
+    // snprintf(accel_buffer[2], sizeof(accel_buffer[2]), "Z: %5d", z);
 
-    ST7789_WriteString(10, 10, "Accelerometer Data", Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 30, accel_buffer[0], Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 50, accel_buffer[1], Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 70, accel_buffer[2], Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 110, encoder_delta_buffer, Font_11x18, BLUE, WHITE);
-    ST7789_WriteString(10, 130, encoder_value_buffer, Font_11x18, BLUE, WHITE);
+    // ST7789_WriteString(10, 10, "Accelerometer Data", Font_11x18, BLUE, WHITE);
+    // ST7789_WriteString(10, 30, accel_buffer[0], Font_11x18, BLUE, WHITE);
+    // ST7789_WriteString(10, 50, accel_buffer[1], Font_11x18, BLUE, WHITE);
+    // ST7789_WriteString(10, 70, accel_buffer[2], Font_11x18, BLUE, WHITE);
+    // ST7789_WriteString(10, 110, encoder_delta_buffer, Font_11x18, BLUE, WHITE);
+    // ST7789_WriteString(10, 130, encoder_value_buffer, Font_11x18, BLUE, WHITE);
 
     osDelay(100);
 
@@ -590,8 +648,8 @@ void EncoderReadTask(void *argument) {
     read_from_encoder(&hi2c1, encoder_reg, encoder_data, 4);
     read_from_encoder(&hi2c1, encoder_delta_reg, encoder_delta_data, 4);
 
-    int32_t encoder_value = ((int32_t)encoder_data[0] << 24) | ((int32_t)encoder_data[1] << 16) | ((int32_t)encoder_data[2] << 8) | (int32_t)encoder_data[3];
-    int32_t encoder_delta = ((int32_t)encoder_delta_data[0] << 24) | ((int32_t)encoder_delta_data[1] << 16) | ((int32_t)encoder_delta_data[2] << 8) | (int32_t)encoder_delta_data[3];
+    // int32_t encoder_value = ((int32_t)encoder_data[0] << 24) | ((int32_t)encoder_data[1] << 16) | ((int32_t)encoder_data[2] << 8) | (int32_t)encoder_data[3];
+    // int32_t encoder_delta = ((int32_t)encoder_delta_data[0] << 24) | ((int32_t)encoder_delta_data[1] << 16) | ((int32_t)encoder_delta_data[2] << 8) | (int32_t)encoder_delta_data[3];
 
 
     osDelay(100);
@@ -600,7 +658,6 @@ void EncoderReadTask(void *argument) {
 
 }
 /* USER CODE END Tasks */
-
 
 /* USER CODE BEGIN Header_StartDefaultTask */
 
@@ -657,13 +714,14 @@ void PollI2CDevices(void) {
     if (HAL_I2C_IsDeviceReady(&hi2c1, a << 1, 2, 10) == HAL_OK) {
       snprintf(buffer, sizeof(buffer), "Found device: 0x%02X\n", a);
       printf(buffer);
-      ST7789_WriteString(10, (20 * i) + 10, buffer, Font_11x18, BLUE, WHITE);
+      // ST7789_WriteString(10, (20 * i) + 10, buffer, Font_11x18, BLUE, WHITE);
       i++;
     }
   }
  
 }
 
+/* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
@@ -673,7 +731,14 @@ void StartDefaultTask(void *argument)
   // char encoder_value_buffer[100];
   // char accel_buffer[3][100];
   
-  ST7789_Fill_Color(BLACK);
+  // ST7789_Fill_Color(BLACK);
+
+  GC9A01_Initial();
+  GC9A01_ClearScreen(WHITE);
+  GC9A01_SetBackColor(BLACK);
+  GC9A01_SetFont(&Font16);
+  GC9A01_Text("Hello world", 1);
+  GC9A01_DrawCircle(120, 120, 60, BLUE);
 
   PollI2CDevices();
 
@@ -689,18 +754,17 @@ void StartDefaultTask(void *argument)
 
   printf("Initialization complete. Entering main loop...\n");
 
-  osThreadStop(defaultTaskHandle); // Stop the default task after initialization
+  // osThreadStop(defaultTaskHandle); // Stop the default task after initialization
 
   /* Infinite loop */
   for (;;)
   {
     // ST7789_Fill_Color(BLACK);
 
-    // osDelay(100);
+    osDelay(1000);
   }
   /* USER CODE END 5 */
 }
-/* USER CODE END Header_StartDefaultTask */
 
 /**
   * @brief  Period elapsed callback in non blocking mode
