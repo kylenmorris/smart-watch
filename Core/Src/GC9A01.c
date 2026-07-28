@@ -955,7 +955,7 @@ void GC9A01_Text(char *str, uint8_t page) {
         }
     }
 }
-
+/*
 void GC9A01_Rainbow_String(uint16_t x,uint16_t y, char *str)
 {
 	current_text_color = red;
@@ -1002,7 +1002,6 @@ void GC9A01_Rainbow_String(uint16_t x,uint16_t y, char *str)
 }
 
 
-/*
 
 void ShowMenu(struct MenuMember Members[AMOUNT_OF_MENU_MEMBERS],uint8_t page_num){
 	

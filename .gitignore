@@ -1,3 +1,5 @@
 build
 mx.scratch
 !.settings
+Core/Src/GC9A01.c
+/.vscode

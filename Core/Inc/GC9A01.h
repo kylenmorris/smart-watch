@@ -31,7 +31,7 @@
 
 #define LCD_W 240								//With of LCD
 #define LCD_H 240								//Height of LCD
-#define USE_HORIZONTAL 1  //Set the display direction 0,1,2,3	four directions
+#define USE_HORIZONTAL 3  //Set the display direction 0,1,2,3	four directions
 
 /*******************************************INIT DISPLAY DATA****************************************************/
 #define GC9A01_RST_DELAY 120    ///< delay ms wait for reset finish
@@ -215,7 +215,7 @@ void GC9A01_SetFont(sFONT *pFonts);
 void GC9A01_DrawChar(uint16_t x, uint16_t y, uint8_t c);
 void GC9A01_String(uint16_t x,uint16_t y, char *str);
 void GC9A01_Text(char *str,uint8_t page);
-void GC9A01_Rainbow_String(uint16_t x,uint16_t y, char *str);
+// void GC9A01_Rainbow_String(uint16_t x,uint16_t y, char *str);
 // void ShowMenu(struct MenuMember Members[AMOUNT_OF_MENU_MEMBERS - 1],uint8_t page_num);
 // void refresh_menu_member(struct MenuMember Members, uint8_t pos);
 // uint8_t get_active_menu_member(struct MenuMember Members[AMOUNT_OF_MENU_MEMBERS]);
