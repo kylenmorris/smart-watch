@@ -45,11 +45,11 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Core/Src/gc9a01.c
-    ${CMAKE_SOURCE_DIR}/Core/Src/font8.c
-    ${CMAKE_SOURCE_DIR}/Core/Src/font12.c
-    ${CMAKE_SOURCE_DIR}/Core/Src/font16.c
-    ${CMAKE_SOURCE_DIR}/Core/Src/font20.c
-    ${CMAKE_SOURCE_DIR}/Core/Src/font24.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/fonts/font8.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/fonts/font12.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/fonts/font16.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/fonts/font20.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/fonts/font24.c
 )
 
 # Add include paths

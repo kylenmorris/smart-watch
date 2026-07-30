@@ -13,6 +13,10 @@ extern volatile uint8_t dma_spi_fl1;
 volatile uint8_t shift = 0;
 volatile colors current_text_color;
 uint16_t gradient_scale_current_pos = 0;
+
+uint16_t clear_window_temp_buff[256]; 
+uint16_t show_picture_temp_buff[512];
+
 /************************************basic display fuctions start************************************/
 // #pragma push
 // #pragma O0
@@ -389,16 +393,16 @@ void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t en
     uint32_t loopNum = (totalSize - (totalSize % bufSize)) / bufSize;
     uint32_t modNum = totalSize % bufSize;
 
-    uint16_t tempBuf[bufSize];
+    // uint16_t tempBuf[bufSize];
     uint8_t *ptempBuf;
 
     for (i = 0; i < bufSize; i++) {
-        tempBuf[i] = tempColor;
+        clear_window_temp_buff[i] = tempColor;
     }
 
     GC9A01_SetPos(startX, startY, endX - 1, endY - 1);
 
-    ptempBuf = (uint8_t *)tempBuf;
+    ptempBuf = (uint8_t *)clear_window_temp_buff;
     for (i = 0; i < loopNum; i++) {
         GC9A01_Write_Bytes(ptempBuf, bufSize);
     }
