@@ -48,12 +48,26 @@ const osThreadAttr_t defaultTask_attributes = {
 
 /* USER CODE BEGIN PV */
 
+#define SYSTEM_STATE_TASK_DELAY 10
+#define ENCODER_TASK_DELAY 100
+#define ACCELEROMETER_TASK_DELAY 100
+
+#define SYSTEM_STATE_TASK_STACK_SIZE 1024 * 4
+#define ENCODER_TASK_STACK_SIZE 512 * 4
+#define ACCELEROMETER_TASK_STACK_SIZE 512 * 4
+
+#define SYSTEM_STATE_TASK_PRIORITY osPriorityNormal
+#define ENCODER_TASK_PRIORITY osPriorityNormal
+#define ACCELEROMETER_TASK_PRIORITY osPriorityNormal1
+
 typedef struct {
   osMessageQueueId_t encoderQueue;
+  osMessageQueueId_t accelerometerQueue;
 } SystemStateTaskArgs;
 
 SystemStateTaskArgs systemStateTaskArgs = {
-  .encoderQueue = NULL
+  .encoderQueue = NULL,
+  .accelerometerQueue = NULL
 };
 
 typedef struct {
@@ -66,17 +80,36 @@ EncoderTaskArgs encoderTaskArgs = {
   .queue = NULL
 };
 
+typedef struct {
+  I2C_HandleTypeDef *hi2c;
+  osMessageQueueId_t queue;
+} AccelerometerTaskArgs;
+
+AccelerometerTaskArgs accelerometerTaskArgs = {
+  .hi2c = &hi2c1,
+  .queue = NULL
+};
+
 osThreadId_t systemStateTaskHandle;
+osThreadId_t encoderTaskHandle;
+osThreadId_t accelerometerTaskHandle;
+
 const osThreadAttr_t systemStateTask_attributes = {
   .name = "systemStateTask",
-  .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = SYSTEM_STATE_TASK_STACK_SIZE,
+  .priority = SYSTEM_STATE_TASK_PRIORITY,
 };
 
 const osThreadAttr_t encoderTask_attributes = {
   .name = "encoderTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = ENCODER_TASK_STACK_SIZE,
+  .priority = ENCODER_TASK_PRIORITY,
+};
+
+const osThreadAttr_t accelerometerTask_attributes = {
+  .name = "accelerometerTask",
+  .stack_size = ACCELEROMETER_TASK_STACK_SIZE,
+  .priority = ACCELEROMETER_TASK_PRIORITY,
 };
 
 volatile uint8_t accel_interrupt_flag; 
@@ -192,9 +225,12 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   osMessageQueueId_t encoderQueueHandle = osMessageQueueNew(10, sizeof(int8_t), NULL); 
-
   encoderTaskArgs.queue = encoderQueueHandle;
   systemStateTaskArgs.encoderQueue = encoderQueueHandle;
+
+  osMessageQueueId_t accelerometerQueueHandle = osMessageQueueNew(10, sizeof(uint16_t), NULL);
+  accelerometerTaskArgs.queue = accelerometerQueueHandle;
+  systemStateTaskArgs.accelerometerQueue = accelerometerQueueHandle;
 
   /* USER CODE END RTOS_QUEUES */
 
@@ -325,6 +361,7 @@ typedef enum {
 void DrawWatchStateFace(void) {
   // Draw the watch face for the watch state
   GC9A01_ClearScreen(WHITE);
+  GC9A01_SetBackColor(WHITE);
   GC9A01_SetTextColor(BLUE);
   GC9A01_SetFont(&Font24);
   GC9A01_String(10, 120, "Watch State");
@@ -333,17 +370,21 @@ void DrawWatchStateFace(void) {
 void DrawChronoStateFace(void) {
   // Draw the watch face for the chronograph state
   GC9A01_ClearScreen(WHITE);
+  GC9A01_SetBackColor(WHITE);
   GC9A01_SetTextColor(GREEN);
   GC9A01_SetFont(&Font24);
-  GC9A01_String(120, 120, "Chronograph State");
+  GC9A01_String(10, 120, "Chronograph State");
 }
 
 void SystemStateTask(void *argument) {
 
   uint8_t redraw = 0;
 
+  char x_value_buffer[20] = "X: 0";
+
   SystemStateTaskArgs *args = (SystemStateTaskArgs *)argument;
   osMessageQueueId_t encoderQueue = args->encoderQueue;
+  osMessageQueueId_t accelerometerQueue = args->accelerometerQueue;
 
   SystemState current_state = STATE_WATCH;
 
@@ -362,10 +403,20 @@ void SystemStateTask(void *argument) {
       }
     }
 
+    uint16_t accelerometer_data;
+    if (osMessageQueueGet(accelerometerQueue, &accelerometer_data, NULL, 100) == osOK) {
+        redraw = 1;
+        snprintf(x_value_buffer, sizeof(x_value_buffer), "X: %d", accelerometer_data);
+    }
+
     if (redraw) {
       switch (current_state) {
         case STATE_WATCH:
+
+        
           DrawWatchStateFace();
+          GC9A01_SetTextColor(BLUE);
+          GC9A01_String(10, 150, x_value_buffer);
           break;
         case STATE_CHRONO:
           DrawChronoStateFace();
@@ -376,7 +427,7 @@ void SystemStateTask(void *argument) {
       }
     }
 
-    osDelay(500);
+    osDelay(SYSTEM_STATE_TASK_DELAY);
   }
 }
 
@@ -390,21 +441,26 @@ void ChronoTask(void *argument) {
 
 void AccelerometerReadTask(void *argument) {
 
+  EncoderTaskArgs *args = (EncoderTaskArgs *)argument;
+  osMessageQueueId_t accelerometerQueue = args->queue;
+
   for (;;) {
     uint8_t accel_data[6];
     uint8_t num_bytes = 6;
 
-    // int accel_g_scale = 2;
-    // int accel_bits_precision = 16;
-    // float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
+    int accel_g_scale = 2;
+    int accel_bits_precision = 16;
+    float accel_scale_mg = accel_g_scale * 2 * 1000 / (float)(1 << accel_bits_precision);
 
     read_from_accel(&hi2c1, OUTX_L_A, accel_data, num_bytes);
 
-    // int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
+    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
     // int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
     // int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
-   
-    osDelay(100);
+  
+    osMessageQueuePut(accelerometerQueue, &x, 0, 0);
+
+    osDelay(ACCELEROMETER_TASK_DELAY);
   }
 }
 
@@ -480,6 +536,7 @@ void StartDefaultTask(void *argument)
 
     // osThreadNew(AccelerometerReadTask, NULL, NULL);
     // osThreadNew(DisplayWriteTask, NULL, NULL);
+    osThreadNew(AccelerometerReadTask, &accelerometerTaskArgs, &accelerometerTask_attributes);
     osThreadNew(EncoderReadTask, &encoderTaskArgs, &encoderTask_attributes);
     osThreadNew(SystemStateTask, &systemStateTaskArgs, &systemStateTask_attributes);
     // osThreadNew(ChronoTask, NULL, NULL);
