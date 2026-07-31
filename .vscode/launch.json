@@ -13,7 +13,7 @@
       "stm32cubeprogrammer": "C:/ST/STM32CubeCLT_1.21.0/STM32CubeProgrammer/bin",
       "executable": "${workspaceFolder}/build/Debug/smart-watch.elf",
       "preLaunchTask": "CMake: build",
-      "runToEntryPoint": "main",
+      // "runToEntryPoint": "main",
       "showDevDebugOutput": "none"
     }
 

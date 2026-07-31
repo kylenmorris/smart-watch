@@ -57,7 +57,7 @@ void GC9A01_Write_Bytes(uint8_t * pbuff, uint16_t size)
 
 /***************************** dma functions end ****************************************/
 
-void GC9A01_Write_Cmd_Data (uint8_t CMDP)
+void GC9A01_Write_Cmd_Data(uint8_t CMDP)
 {
 	LCD_CS_0;
 	LCD_DC_1;
@@ -98,12 +98,29 @@ void GC9A01_Write_Data(uint8_t DH,uint8_t DL)
 	LCD_CS_1;
 }
 
+void GC9A01_Set_Orientation(uint8_t orientation)
+{
+
+	GC9A01_Write_Cmd(0x36); // memory access control
+	if(orientation==0)
+		GC9A01_Write_Cmd_Data(0x18);			
+	else if (orientation==1)
+		GC9A01_Write_Cmd_Data(0x28);	
+	else if (orientation==2)
+		GC9A01_Write_Cmd_Data(0x48); 
+	else 
+		GC9A01_Write_Cmd_Data(0x88); 					
+
+}
+
 
 void GC9A01_Initial(void)
 {
-  LCD_CS_1;
+  	LCD_CS_1;
+
+	// Reset display
 	LCD_RST_1;
-	HAL_Delay(GC9A01_RST_DELAY); // trying delay
+	HAL_Delay(GC9A01_RST_DELAY);
 	LCD_RST_0;              
 	HAL_Delay(GC9A01_RST_DELAY); 
 	LCD_RST_1;
@@ -150,29 +167,23 @@ void GC9A01_Initial(void)
 	GC9A01_Write_Cmd(0x8D);
 	GC9A01_Write_Cmd_Data(0x01);
 
-	GC9A01_Write_Cmd(0x8E);
+	GC9A01_Write_Cmd(0x8E); // 
 	GC9A01_Write_Cmd_Data(0xFF);
 
-	GC9A01_Write_Cmd(0x8F);
+	GC9A01_Write_Cmd(0x8F); // 
 	GC9A01_Write_Cmd_Data(0xFF);
 
 
-	GC9A01_Write_Cmd(0xB6);
+	GC9A01_Write_Cmd(0xB6); // display function control
 	GC9A01_Write_Cmd_Data(0x00);
 	GC9A01_Write_Cmd_Data(0x00);
 
-	GC9A01_Write_Cmd(0x36);
+	GC9A01_Set_Orientation(GC9A01_TOP);
 
-	if(USE_HORIZONTAL==0)GC9A01_Write_Cmd_Data(0x18);
-	else if(USE_HORIZONTAL==1)GC9A01_Write_Cmd_Data(0x28);
-	else if(USE_HORIZONTAL==2)GC9A01_Write_Cmd_Data(0x48);
-	else GC9A01_Write_Cmd_Data(0x88);
+	GC9A01_Write_Cmd(0x3A); // Pixel format set
+	GC9A01_Write_Cmd_Data(0x05); // could just be 0x01 i think 
 
-	GC9A01_Write_Cmd(0x3A);
-	GC9A01_Write_Cmd_Data(0x05);
-
-
-	GC9A01_Write_Cmd(0x90);
+	GC9A01_Write_Cmd(0x90); // 
 	GC9A01_Write_Cmd_Data(0x08);
 	GC9A01_Write_Cmd_Data(0x08);
 	GC9A01_Write_Cmd_Data(0x08);

@@ -25,13 +25,19 @@
 #define LL_DMA_ClearFlag_TE LL_DMA_ClearFlag_TE4
 #define LL_DMA_IsActiveFlag_TC LL_DMA_IsActiveFlag_TC4
 #define LL_DMA_IsActiveFlag_TE LL_DMA_IsActiveFlag_TE4
+
 /****************************************************************************************************************/
+
+#define GC9A01_TOP 3
+#define GC9A01_BOTTOM 2
+#define GC9A01_LEFT 0
+#define GC9A01_RIGHT 1
 
 #define swap(a,b) {int16_t t=a;a=b;b=t;}
 
 #define LCD_W 240								//With of LCD
 #define LCD_H 240								//Height of LCD
-#define USE_HORIZONTAL 3  //Set the display direction 0,1,2,3	four directions
+// #define USE_HORIZONTAL 3  //Set the display direction 0,1,2,3	four directions
 
 /*******************************************INIT DISPLAY DATA****************************************************/
 #define GC9A01_RST_DELAY 120    ///< delay ms wait for reset finish
@@ -149,11 +155,11 @@ typedef enum
 	unactive
 }states;
 
-struct MenuMember {
-    char text[50];
-    uint8_t number;
-		states state;
-};
+// struct MenuMember {
+//     char text[50];
+//     uint8_t number;
+// 		states state;
+// };
 
 typedef enum
 {
@@ -174,6 +180,11 @@ typedef struct
 	sFONT *pFont;
 }GC9A01_DrawPropTypeDef;
 
+
+void GC9A01_Set_Orientation(uint8_t orientation);
+
+
+
 void SPI_write(uint8_t data);
 void GC9A01_Write_Bytes(uint8_t * pbuff, uint16_t size);
 
@@ -182,6 +193,7 @@ void GC9A01_Write_Cmd(uint8_t CMD);
 void GC9A01_Write_Data_U16(uint16_t y);
 void GC9A01_Write_Data(uint8_t DH,uint8_t DL);
 void GC9A01_Initial(void);
+
 void GC9A01_ClearScreen(uint16_t bColor);
 void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t endY, uint16_t bColor);
 void GC9A01_SetPos(uint8_t Xstart, uint8_t Ystart, uint8_t Xend, uint8_t Yend);

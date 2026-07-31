@@ -358,22 +358,42 @@ typedef enum {
   STATE_GAME
 } SystemState;
 
+void get_current_time_string(char *timeBuffer, char *dateBuffer, size_t buffer_size) {
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+
+  HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+  HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+  snprintf(timeBuffer, buffer_size, "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+  snprintf(dateBuffer, buffer_size, "%02d/%02d/%04d", sDate.Month, sDate.Date, sDate.Year);
+}
+
 void DrawWatchStateFace(void) {
   // Draw the watch face for the watch state
-  GC9A01_ClearScreen(WHITE);
-  GC9A01_SetBackColor(WHITE);
-  GC9A01_SetTextColor(BLUE);
+  GC9A01_ClearScreen(BLACK);
+  GC9A01_SetBackColor(BLACK);
+  GC9A01_SetTextColor(WHITE);
   GC9A01_SetFont(&Font24);
-  GC9A01_String(10, 120, "Watch State");
+  // GC9A01_String(10, 120, "Watch State");
+  char time_buffer[20];
+  char date_buffer[20];
+  get_current_time_string(time_buffer, date_buffer, sizeof(time_buffer));
+  // snprintf(time_buffer, sizeof(time_buffer), "%s", time_buffer);
+  GC9A01_String(40, 120, time_buffer);
+  GC9A01_String(40, 150, date_buffer);
 }
 
 void DrawChronoStateFace(void) {
   // Draw the watch face for the chronograph state
-  GC9A01_ClearScreen(WHITE);
-  GC9A01_SetBackColor(WHITE);
-  GC9A01_SetTextColor(GREEN);
+  GC9A01_ClearScreen(BLACK);
+  GC9A01_SetBackColor(BLACK);
+  GC9A01_SetTextColor(WHITE);
   GC9A01_SetFont(&Font24);
-  GC9A01_String(10, 120, "Chronograph State");
+  char chrono_buffer[20];
+  snprintf(chrono_buffer, sizeof(chrono_buffer), "Timer: 00:00");
+  // GC9A01_String(20, 120, "Chronograph State");
+  GC9A01_String(20, 120, chrono_buffer);
 }
 
 void SystemStateTask(void *argument) {
@@ -387,6 +407,8 @@ void SystemStateTask(void *argument) {
   osMessageQueueId_t accelerometerQueue = args->accelerometerQueue;
 
   SystemState current_state = STATE_WATCH;
+
+  GC9A01_ClearScreen(BLACK);
 
   for (;;) {
 
@@ -403,10 +425,16 @@ void SystemStateTask(void *argument) {
       }
     }
 
-    uint16_t accelerometer_data;
+    int16_t accelerometer_data;
     if (osMessageQueueGet(accelerometerQueue, &accelerometer_data, NULL, 100) == osOK) {
-        redraw = 1;
+        // redraw = 1;
         snprintf(x_value_buffer, sizeof(x_value_buffer), "X: %d", accelerometer_data);
+        
+        if (accelerometer_data < 0) {
+          GC9A01_Set_Orientation(GC9A01_TOP);
+        } else {
+          GC9A01_Set_Orientation(GC9A01_BOTTOM);
+        }
     }
 
     if (redraw) {
@@ -415,8 +443,8 @@ void SystemStateTask(void *argument) {
 
         
           DrawWatchStateFace();
-          GC9A01_SetTextColor(BLUE);
-          GC9A01_String(10, 150, x_value_buffer);
+          // GC9A01_SetTextColor(BLUE);
+          // GC9A01_String(10, 150, x_value_buffer);
           break;
         case STATE_CHRONO:
           DrawChronoStateFace();
@@ -454,11 +482,11 @@ void AccelerometerReadTask(void *argument) {
 
     read_from_accel(&hi2c1, OUTX_L_A, accel_data, num_bytes);
 
-    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
-    // int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
+    // int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
+    int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
     // int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
   
-    osMessageQueuePut(accelerometerQueue, &x, 0, 0);
+    osMessageQueuePut(accelerometerQueue, &y, 0, 0);
 
     osDelay(ACCELEROMETER_TASK_DELAY);
   }
