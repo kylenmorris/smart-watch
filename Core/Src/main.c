@@ -48,27 +48,77 @@ const osThreadAttr_t defaultTask_attributes = {
 
 /* USER CODE BEGIN PV */
 
+#define ACCEL_X 0
+#define ACCEL_Y 1
+#define ACCEL_Z 2
+
+#define EVENT_REDRAW_DISPLAY (1U << 0)
+
+#define DISPLAY_REDRAW_PERIOD 1000
+
 #define SYSTEM_STATE_TASK_DELAY 10
 #define ENCODER_TASK_DELAY 100
-#define ACCELEROMETER_TASK_DELAY 50
+#define DISPLAY_TASK_DELAY 20
+#define ACCELEROMETER_TASK_DELAY 20
 
 #define SYSTEM_STATE_TASK_STACK_SIZE 1024 * 4
 #define ENCODER_TASK_STACK_SIZE 512 * 4
+#define DISPLAY_TASK_STACK_SIZE 512 * 4
 #define ACCELEROMETER_TASK_STACK_SIZE 512 * 4
 
 #define SYSTEM_STATE_TASK_PRIORITY osPriorityNormal
 #define ENCODER_TASK_PRIORITY osPriorityNormal
+#define DISPLAY_TASK_PRIORITY osPriorityNormal
 #define ACCELEROMETER_TASK_PRIORITY osPriorityNormal1
+
+#define SYSTEM_STATE_TASK_WAIT 50
+#define DISPLAY_TASK_WAIT 50
+#define ENCODER_TASK_WAIT 50
+
+int16_t accel_data_global[3];
+
+// ########### Display State Management ################
+
+typedef struct {
+  uint8_t current_state;
+  RTC_TimeTypeDef current_time;
+  RTC_DateTypeDef current_date;
+  uint8_t orientation;
+} DisplayState;
+
+DisplayState displayState = {
+  .current_state = 0,
+  .current_time = {0},
+  .current_date = {0},
+  .orientation = GC9A01_TOP
+};
+
+typedef struct {
+  DisplayState *displayState;
+  osMutexId_t systemStateMutex;
+  osEventFlagsId_t eventFlags;
+} DisplayTaskArgs;
+
+DisplayTaskArgs displayTaskArgs = {
+  .displayState = &displayState
+};
+
+// ############## System State Task ################
 
 typedef struct {
   osMessageQueueId_t encoderQueue;
-  osMessageQueueId_t accelerometerQueue;
+  osMutexId_t accelMutex;
+  DisplayState *displayState;
+  osMutexId_t systemStateMutex;
+  osEventFlagsId_t eventFlags;
+  osTimerId_t timerHandle;
 } SystemStateTaskArgs;
 
 SystemStateTaskArgs systemStateTaskArgs = {
-  .encoderQueue = NULL,
-  .accelerometerQueue = NULL
+  .displayState = &displayState
 };
+
+// ############## Encoder Task ################
 
 typedef struct {
   I2C_HandleTypeDef *hi2c;
@@ -80,19 +130,26 @@ EncoderTaskArgs encoderTaskArgs = {
   .queue = NULL
 };
 
+// ############## Accelerometer Task ################
+
 typedef struct {
   I2C_HandleTypeDef *hi2c;
-  osMessageQueueId_t queue;
+  osMutexId_t accelMutex;
 } AccelerometerTaskArgs;
 
 AccelerometerTaskArgs accelerometerTaskArgs = {
   .hi2c = &hi2c1,
-  .queue = NULL
+  .accelMutex = NULL
 };
+
+// ############## Task Handles ################
 
 osThreadId_t systemStateTaskHandle;
 osThreadId_t encoderTaskHandle;
 osThreadId_t accelerometerTaskHandle;
+osThreadId_t displayTaskHandle;
+
+// ############## Task Attributes ################
 
 const osThreadAttr_t systemStateTask_attributes = {
   .name = "systemStateTask",
@@ -106,11 +163,19 @@ const osThreadAttr_t encoderTask_attributes = {
   .priority = ENCODER_TASK_PRIORITY,
 };
 
+const osThreadAttr_t displayTask_attributes = {
+  .name = "displayTask",
+  .stack_size = DISPLAY_TASK_STACK_SIZE,
+  .priority = DISPLAY_TASK_PRIORITY,
+};
+
 const osThreadAttr_t accelerometerTask_attributes = {
   .name = "accelerometerTask",
   .stack_size = ACCELEROMETER_TASK_STACK_SIZE,
   .priority = ACCELEROMETER_TASK_PRIORITY,
 };
+
+
 
 volatile uint8_t accel_interrupt_flag; 
 volatile uint8_t dma_spi_fl1 = 0;
@@ -134,30 +199,21 @@ void read_from_encoder(I2C_HandleTypeDef *hi2c, uint16_t reg, uint8_t *data, uin
 void InitEncoder(void);
 void InitAccelerometer(void);
 
-void DrawWatchStateFace(void);
-void DrawChronoStateFace(void);
+void DrawWatchStateFace(DisplayState *displayState);
+void DrawChronoStateFace(DisplayState *displayState);
 
 void SystemStateTask(void *argument);
 void AccelerometerTask(void *argument);
+void DisplayTask(void *argument);
 void EncoderTask(void *argument);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 
-// #ifdef __GNUC__
-// #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-// #else
-// #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-// #endif
-
-// /* Retarget printf to USART2 */
-// PUTCHAR_PROTOTYPE
-// {
-//   HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-//   return ch;
-// }
-/* USER CODE END 0 */
+void TimerCallback(void *argument) {
+  osEventFlagsSet(displayTaskArgs.eventFlags, EVENT_REDRAW_DISPLAY);
+}
 
 /**
   * @brief  The application entry point.
@@ -215,33 +271,40 @@ int main(void)
   osKernelInitialize();
 
   /* USER CODE BEGIN RTOS_MUTEX */
+  osMutexId_t accelMutexHandle = osMutexNew(NULL);
+  accelerometerTaskArgs.accelMutex = accelMutexHandle;
+
+  osMutexId_t systemStateMutexHandle = osMutexNew(NULL);
+  systemStateTaskArgs.systemStateMutex = systemStateMutexHandle;
+  displayTaskArgs.systemStateMutex = systemStateMutexHandle;
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
+  osTimerId_t displayTimerHandle = osTimerNew(TimerCallback, osTimerPeriodic, NULL, NULL);
+  systemStateTaskArgs.timerHandle = displayTimerHandle;
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  osMessageQueueId_t encoderQueueHandle = osMessageQueueNew(10, sizeof(int8_t), NULL); 
+  osMessageQueueId_t encoderQueueHandle = osMessageQueueNew(3, sizeof(int8_t), NULL); 
   encoderTaskArgs.queue = encoderQueueHandle;
   systemStateTaskArgs.encoderQueue = encoderQueueHandle;
-
-  osMessageQueueId_t accelerometerQueueHandle = osMessageQueueNew(10, sizeof(uint16_t), NULL);
-  accelerometerTaskArgs.queue = accelerometerQueueHandle;
-  systemStateTaskArgs.accelerometerQueue = accelerometerQueueHandle;
 
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
- /* creation of defaultTask */
+  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of defaultTask */
   
   /* USER CODE BEGIN RTOS_THREADS */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
+  osEventFlagsId_t eventFlagsHandle = osEventFlagsNew(NULL);
+  displayTaskArgs.eventFlags = eventFlagsHandle;
+  systemStateTaskArgs.eventFlags = eventFlagsHandle;
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -259,7 +322,6 @@ int main(void)
   }
   /* USER CODE END 3 */
 }
-
 
 void write_to_accel(I2C_HandleTypeDef *hi2c, uint8_t reg, uint8_t *data, uint16_t size) {
     HAL_StatusTypeDef status = HAL_I2C_Mem_Write(hi2c, ACCEL_ADDRESS << 1, reg, I2C_MEMADD_SIZE_8BIT, data, size, TIMEOUT);
@@ -358,113 +420,130 @@ typedef enum {
   STATE_GAME
 } SystemState;
 
-void get_current_time_string(char *timeBuffer, char *dateBuffer, size_t buffer_size) {
-  RTC_TimeTypeDef sTime;
-  RTC_DateTypeDef sDate;
-
-  HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
-  HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
-
-  snprintf(timeBuffer, buffer_size, "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-  snprintf(dateBuffer, buffer_size, "%02d/%02d/%04d", sDate.Month, sDate.Date, sDate.Year);
-}
-
-void DrawWatchStateFace(void) {
-  // Draw the watch face for the watch state
-  GC9A01_ClearScreen(BLACK);
-  GC9A01_SetBackColor(BLACK);
-  GC9A01_SetTextColor(WHITE);
-  GC9A01_SetFont(&Font24);
-  // GC9A01_String(10, 120, "Watch State");
+void DrawWatchStateFace(DisplayState *displayState) {
+  
   char time_buffer[20];
   char date_buffer[20];
-  get_current_time_string(time_buffer, date_buffer, sizeof(time_buffer));
-  // snprintf(time_buffer, sizeof(time_buffer), "%s", time_buffer);
+
+  RTC_TimeTypeDef sTime = displayState->current_time;
+  RTC_DateTypeDef sDate = displayState->current_date;
+
+  snprintf(time_buffer, sizeof(time_buffer), "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+  snprintf(date_buffer, sizeof(date_buffer), "%02d/%02d/%04d", sDate.Month, sDate.Date, sDate.Year);
+  
+  GC9A01_ClearScreen(BLACK);
+
   GC9A01_String(40, 120, time_buffer);
   GC9A01_String(40, 150, date_buffer);
 }
 
-void DrawChronoStateFace(void) {
-  // Draw the watch face for the chronograph state
-  GC9A01_ClearScreen(BLACK);
-  GC9A01_SetBackColor(BLACK);
-  GC9A01_SetTextColor(WHITE);
-  GC9A01_SetFont(&Font24);
+void DrawChronoStateFace(DisplayState *displayState) {
+
   char chrono_buffer[20];
-  snprintf(chrono_buffer, sizeof(chrono_buffer), "Timer: 00:00");
-  // GC9A01_String(20, 120, "Chronograph State");
+
+  snprintf(chrono_buffer, sizeof(chrono_buffer), "Timer: 00:00.00");
+
+  GC9A01_ClearScreen(BLACK);
   GC9A01_String(20, 80, chrono_buffer);
+}
+
+void DisplayTask(void *argument) {
+
+  DisplayTaskArgs *args = (DisplayTaskArgs *)argument;
+  osMutexId_t systemStateMutex = args->systemStateMutex;
+  DisplayState *displayState = args->displayState;
+  osEventFlagsId_t eventFlags = args->eventFlags;
+ 
+  DisplayState local_display_state;
+
+  for (;;) {
+
+    osEventFlagsWait(eventFlags, EVENT_REDRAW_DISPLAY, osFlagsWaitAny, osWaitForever);
+    osEventFlagsClear(eventFlags, EVENT_REDRAW_DISPLAY);
+
+    osMutexAcquire(systemStateMutex, DISPLAY_TASK_WAIT);
+    local_display_state = *displayState;
+    osMutexRelease(systemStateMutex);
+
+    GC9A01_Set_Orientation(local_display_state.orientation);
+
+    switch (local_display_state.current_state) {
+      case STATE_WATCH:
+        DrawWatchStateFace(&local_display_state);
+        break;
+      case STATE_CHRONO:
+        DrawChronoStateFace(&local_display_state);
+        break;
+      case STATE_GAME:
+        // DrawGameStateFace();
+        break;
+      default:
+        break;
+    }
+
+    osDelay(DISPLAY_TASK_DELAY);
+
+  }
 }
 
 void SystemStateTask(void *argument) {
 
-  uint8_t redraw = 1;
-
-  char x_value_buffer[20] = "X: 0";
-
   SystemStateTaskArgs *args = (SystemStateTaskArgs *)argument;
   osMessageQueueId_t encoderQueue = args->encoderQueue;
-  osMessageQueueId_t accelerometerQueue = args->accelerometerQueue;
+  osMutexId_t accelMutex = args->accelMutex;
+  osMutexId_t systemStateMutex = args->systemStateMutex;
+  DisplayState *displayState = args->displayState;
+  osTimerId_t timerHandle = args->timerHandle;
+  osEventFlagsId_t eventFlags = args->eventFlags;
   
-  SystemState current_state = STATE_WATCH;
+  int16_t accelerometer_data_y;
+  int8_t encoder_delta;
 
-  uint8_t orientation = GC9A01_TOP; // Default orientation
+  DisplayState local_display_state = {
+    .current_state = STATE_WATCH,
+    .current_time = {0},
+    .current_date = {0},
+    .orientation = GC9A01_TOP
+  };
+
+  uint8_t redraw = 0;
+  uint8_t previous_orientation = GC9A01_TOP;
+
+  osTimerStart(timerHandle, DISPLAY_REDRAW_PERIOD);
   
   GC9A01_ClearScreen(BLACK);
 
   for (;;) {
 
-    redraw = 0;
-
-    int8_t encoder_delta;
     if (osMessageQueueGet(encoderQueue, &encoder_delta, NULL, 100) == osOK) {
-      if (encoder_delta > 0) {
-        current_state = STATE_WATCH; 
-        redraw = 1;
-      } else if (encoder_delta < 0) {
-        current_state = STATE_CHRONO;
-        redraw = 1;
-      }
+      if (encoder_delta > 0) {        local_display_state.current_state = STATE_WATCH;  } 
+      else if (encoder_delta < 0) {   local_display_state.current_state = STATE_CHRONO; }
+      redraw = 1;
     }
 
-    int16_t accelerometer_data;
+    osMutexAcquire(accelMutex, SYSTEM_STATE_TASK_WAIT);
+    accelerometer_data_y = accel_data_global[ACCEL_Y];
+    osMutexRelease(accelMutex);
 
-    if (osMessageQueueGet(accelerometerQueue, &accelerometer_data, NULL, 100) == osOK) {
-        // redraw = 1;
-        snprintf(x_value_buffer, sizeof(x_value_buffer), "X: %d", accelerometer_data);
-        
-        if (accelerometer_data < 0) {
-          if (orientation != GC9A01_TOP) {
-            GC9A01_Set_Orientation(GC9A01_TOP);
-            redraw = 1;
-            orientation = GC9A01_TOP;
-          }
-        } else {
-          if (orientation != GC9A01_BOTTOM) {
-            GC9A01_Set_Orientation(GC9A01_BOTTOM);
-            redraw = 1;
-            orientation = GC9A01_BOTTOM;
-          }
-        }
+    if (accelerometer_data_y < 0) {       local_display_state.orientation = GC9A01_TOP;    }        
+    else if (accelerometer_data_y >= 0) { local_display_state.orientation = GC9A01_BOTTOM; }
+    
+    if (local_display_state.orientation != previous_orientation) {
+      redraw = 1;
+      previous_orientation = local_display_state.orientation;
     }
+
+    HAL_RTC_GetTime(&hrtc, &local_display_state.current_time, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &local_display_state.current_date, RTC_FORMAT_BIN);
 
     if (redraw) {
-      switch (current_state) {
-        case STATE_WATCH:
-
-        
-          DrawWatchStateFace();
-          // GC9A01_SetTextColor(BLUE);
-          // GC9A01_String(10, 150, x_value_buffer);
-          break;
-        case STATE_CHRONO:
-          DrawChronoStateFace();
-          break;
-        case STATE_GAME:
-          // Handle game state
-          break;
-      }
+      osEventFlagsSet(eventFlags, EVENT_REDRAW_DISPLAY);
+      redraw = 0;
     }
+
+    osMutexAcquire(systemStateMutex, SYSTEM_STATE_TASK_WAIT);
+    *displayState = local_display_state;
+    osMutexRelease(systemStateMutex);
 
     osDelay(SYSTEM_STATE_TASK_DELAY);
   }
@@ -480,8 +559,8 @@ void ChronoTask(void *argument) {
 
 void AccelerometerReadTask(void *argument) {
 
-  EncoderTaskArgs *args = (EncoderTaskArgs *)argument;
-  osMessageQueueId_t accelerometerQueue = args->queue;
+  AccelerometerTaskArgs *args = (AccelerometerTaskArgs *)argument;
+  osMutexId_t accelMutex = args->accelMutex;
 
   for (;;) {
     uint8_t accel_data[6];
@@ -493,22 +572,17 @@ void AccelerometerReadTask(void *argument) {
 
     read_from_accel(&hi2c1, OUTX_L_A, accel_data, num_bytes);
 
-    // int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
+    int16_t x = ((int16_t)((uint16_t)accel_data[1] << 8) | (uint16_t)accel_data[0]) * accel_scale_mg;
     int16_t y = ((int16_t)((uint16_t)accel_data[3] << 8) | (uint16_t)accel_data[2]) * accel_scale_mg;
-    // int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
+    int16_t z = ((int16_t)((uint16_t)accel_data[5] << 8) | (uint16_t)accel_data[4]) * accel_scale_mg;
   
-    osMessageQueuePut(accelerometerQueue, &y, 0, 0);
+    osMutexAcquire(accelMutex, SYSTEM_STATE_TASK_WAIT);
+    accel_data_global[ACCEL_X] = x;
+    accel_data_global[ACCEL_Y] = y;
+    accel_data_global[ACCEL_Z] = z;
+    osMutexRelease(accelMutex);
 
     osDelay(ACCELEROMETER_TASK_DELAY);
-  }
-}
-
-void DisplayWriteTask(void *argument) {
-
-  for (;;) {
-
-    osDelay(100);
-
   }
 }
 
@@ -521,16 +595,12 @@ void EncoderReadTask(void *argument) {
 
   for (;;) {
 
-    // uint8_t enco1    if (osMessageQueueGet(*encoderQueue, &encoder_delta, NULL, 100) == osOK) {// 1    if (osMessageQueueGet(*encoderQueue, &encoder_delta, NULL, 100) == osOK) {// 1    if (osMessageQueueGet(*encoderQueue, &encoder_delta, NULL, 100) == osOK) {// 1    if (osMessageQueueGet(*encoderQueue, &encoder_delta, NULL, 100) == osOK) {// der_data[4];
     uint8_t encoder_delta_data[4];
 
-    // uint16_t encoder_reg = ((uint16_t)SEESAW_ENCODER_BASE << 8) | (uint16_t)SEESAW_ENCODER_POSITION;
     uint16_t encoder_delta_reg = ((uint16_t)SEESAW_ENCODER_BASE << 8) | (uint16_t)SEESAW_ENCODER_DELTA;
 
-    // read_from_encoder(hi2c, encoder_reg, encoder_data, 4);
     read_from_encoder(hi2c, encoder_delta_reg, encoder_delta_data, 4);
 
-    // int32_t encoder_value = ((int32_t)encoder_data[0] << 24) | ((int32_t)encoder_data[1] << 16) | ((int32_t)encoder_data[2] << 8) | (int32_t)encoder_data[3];
     // int32_t encoder_delta = ((int32_t)encoder_delta_data[0] << 24) | ((int32_t)encoder_delta_data[1] << 16) | ((int32_t)encoder_delta_data[2] << 8) | (int32_t)encoder_delta_data[3];
     int8_t encoder_delta = (int8_t)encoder_delta_data[3]; 
 
@@ -539,7 +609,6 @@ void EncoderReadTask(void *argument) {
     }
 
     osDelay(100);
-
   }
 
 }
@@ -563,8 +632,9 @@ void StartDefaultTask(void *argument)
 
     GC9A01_Initial();
     // GC9A01_ClearScreen(WHITE);
-    // GC9A01_SetBackColor(BLACK);
-    // GC9A01_SetFont(&Font16);
+    GC9A01_SetBackColor(BLACK);
+    GC9A01_SetTextColor(WHITE);
+    GC9A01_SetFont(&Font24);
     // GC9A01_Text("Hello world", 1);
     // GC9A01_DrawCircle(120, 120, 60, BLUE);
 
@@ -574,7 +644,7 @@ void StartDefaultTask(void *argument)
     InitEncoder();
 
     // osThreadNew(AccelerometerReadTask, NULL, NULL);
-    // osThreadNew(DisplayWriteTask, NULL, NULL);
+    osThreadNew(DisplayTask, &displayTaskArgs, &displayTask_attributes);
     osThreadNew(AccelerometerReadTask, &accelerometerTaskArgs, &accelerometerTask_attributes);
     osThreadNew(EncoderReadTask, &encoderTaskArgs, &encoderTask_attributes);
     osThreadNew(SystemStateTask, &systemStateTaskArgs, &systemStateTask_attributes);
