@@ -16,6 +16,7 @@ uint16_t gradient_scale_current_pos = 0;
 
 uint16_t clear_window_temp_buff[256]; 
 uint16_t show_picture_temp_buff[512];
+uint16_t char_temp_buff[408];
 
 /************************************basic display fuctions start************************************/
 // #pragma push
@@ -102,17 +103,57 @@ void GC9A01_Set_Orientation(uint8_t orientation)
 {
 
 	GC9A01_Write_Cmd(0x36); // memory access control
-	if(orientation==0)
-		GC9A01_Write_Cmd_Data(0x18);			
-	else if (orientation==1)
-		GC9A01_Write_Cmd_Data(0x28);	
-	else if (orientation==2)
-		GC9A01_Write_Cmd_Data(0x48); 
-	else 
-		GC9A01_Write_Cmd_Data(0x88); 					
-
+	switch (orientation) {
+		case GC9A01_LEFT:
+			GC9A01_Write_Cmd_Data(0x18);
+			break;
+		case GC9A01_RIGHT:
+			GC9A01_Write_Cmd_Data(0x28);
+			break;
+		case GC9A01_BOTTOM:
+			GC9A01_Write_Cmd_Data(0x48);
+			break;
+		case GC9A01_TOP:
+			GC9A01_Write_Cmd_Data(0x88);
+			break;
+		default:
+			GC9A01_Write_Cmd_Data(0x18);
+	}
 }
 
+void GC9A01_Set_Gamma(void) {
+	GC9A01_Write_Cmd(0xF0);		// Set gamma 1
+    GC9A01_Write_Cmd_Data(0x45);
+    GC9A01_Write_Cmd_Data(0x09);
+ 	GC9A01_Write_Cmd_Data(0x08);
+	GC9A01_Write_Cmd_Data(0x08);
+ 	GC9A01_Write_Cmd_Data(0x26);
+ 	GC9A01_Write_Cmd_Data(0x2A);
+
+ 	GC9A01_Write_Cmd(0xF1);		// Set gamma 2
+ 	GC9A01_Write_Cmd_Data(0x43);
+ 	GC9A01_Write_Cmd_Data(0x70);
+ 	GC9A01_Write_Cmd_Data(0x72);
+ 	GC9A01_Write_Cmd_Data(0x36);
+ 	GC9A01_Write_Cmd_Data(0x37);
+ 	GC9A01_Write_Cmd_Data(0x6F);
+
+ 	GC9A01_Write_Cmd(0xF2);		// Set gamma 3
+ 	GC9A01_Write_Cmd_Data(0x45);
+ 	GC9A01_Write_Cmd_Data(0x09);
+ 	GC9A01_Write_Cmd_Data(0x08);
+ 	GC9A01_Write_Cmd_Data(0x08);
+ 	GC9A01_Write_Cmd_Data(0x26);
+ 	GC9A01_Write_Cmd_Data(0x2A);
+
+ 	GC9A01_Write_Cmd(0xF3); 		// Set gamma 4
+ 	GC9A01_Write_Cmd_Data(0x43);
+ 	GC9A01_Write_Cmd_Data(0x70);
+ 	GC9A01_Write_Cmd_Data(0x72);
+ 	GC9A01_Write_Cmd_Data(0x36);
+ 	GC9A01_Write_Cmd_Data(0x37);
+ 	GC9A01_Write_Cmd_Data(0x6F);
+}
 
 void GC9A01_Initial(void)
 {
@@ -126,14 +167,19 @@ void GC9A01_Initial(void)
 	LCD_RST_1;
 	HAL_Delay(GC9A01_RST_DELAY);
 
+	// Inner register enable 2
 	GC9A01_Write_Cmd(0xEF);
 
+	// 
 	GC9A01_Write_Cmd(0xEB);
 	GC9A01_Write_Cmd_Data(0x14);
 
+	// Inner register enable 1 
     GC9A01_Write_Cmd(0xFE);
+	// Inner register enable 2
 	GC9A01_Write_Cmd(0xEF);
 
+	// 
 	GC9A01_Write_Cmd(0xEB);
 	GC9A01_Write_Cmd_Data(0x14);
 
@@ -173,17 +219,16 @@ void GC9A01_Initial(void)
 	GC9A01_Write_Cmd(0x8F); // 
 	GC9A01_Write_Cmd_Data(0xFF);
 
-
 	GC9A01_Write_Cmd(0xB6); // display function control
 	GC9A01_Write_Cmd_Data(0x00);
 	GC9A01_Write_Cmd_Data(0x00);
 
 	GC9A01_Set_Orientation(GC9A01_TOP);
 
-	GC9A01_Write_Cmd(0x3A); // Pixel format set
-	GC9A01_Write_Cmd_Data(0x05); // could just be 0x01 i think 
+	GC9A01_Write_Cmd(0x3A); 		// Pixel format set
+	GC9A01_Write_Cmd_Data(0x05); 	// could just be 0x01 i think 
 
-	GC9A01_Write_Cmd(0x90); // 
+	GC9A01_Write_Cmd(0x90); 		// 
 	GC9A01_Write_Cmd_Data(0x08);
 	GC9A01_Write_Cmd_Data(0x08);
 	GC9A01_Write_Cmd_Data(0x08);
@@ -200,15 +245,14 @@ void GC9A01_Initial(void)
 	GC9A01_Write_Cmd_Data(0x01);
 	GC9A01_Write_Cmd_Data(0x04);
 
-	GC9A01_Write_Cmd(0xC3);
-	GC9A01_Write_Cmd_Data(0x13);
-	GC9A01_Write_Cmd(0xC4);
-	GC9A01_Write_Cmd_Data(0x13);
+	GC9A01_Write_Cmd(0xC3);		// Power control 2
+	GC9A01_Write_Cmd_Data(0x13);	// 
+	GC9A01_Write_Cmd(0xC4);		// Power control 3
+	GC9A01_Write_Cmd_Data(0x13);	// 
+	GC9A01_Write_Cmd(0xC9); 		// Power control 4
+	GC9A01_Write_Cmd_Data(0x22);	//
 
-	GC9A01_Write_Cmd(0xC9);
-	GC9A01_Write_Cmd_Data(0x22);
-
-	GC9A01_Write_Cmd(0xBE);
+	GC9A01_Write_Cmd(0xBE);	
 	GC9A01_Write_Cmd_Data(0x11);
 
 	GC9A01_Write_Cmd(0xE1);
@@ -220,40 +264,11 @@ void GC9A01_Initial(void)
 	GC9A01_Write_Cmd_Data(0x0c);
 	GC9A01_Write_Cmd_Data(0x02);
 
-	GC9A01_Write_Cmd(0xF0);
-    GC9A01_Write_Cmd_Data(0x45);
-    GC9A01_Write_Cmd_Data(0x09);
- 	GC9A01_Write_Cmd_Data(0x08);
-	GC9A01_Write_Cmd_Data(0x08);
- 	GC9A01_Write_Cmd_Data(0x26);
- 	GC9A01_Write_Cmd_Data(0x2A);
 
- 	GC9A01_Write_Cmd(0xF1);
- 	GC9A01_Write_Cmd_Data(0x43);
- 	GC9A01_Write_Cmd_Data(0x70);
- 	GC9A01_Write_Cmd_Data(0x72);
- 	GC9A01_Write_Cmd_Data(0x36);
- 	GC9A01_Write_Cmd_Data(0x37);
- 	GC9A01_Write_Cmd_Data(0x6F);
+	GC9A01_Set_Gamma();
 
 
- 	GC9A01_Write_Cmd(0xF2);
- 	GC9A01_Write_Cmd_Data(0x45);
- 	GC9A01_Write_Cmd_Data(0x09);
- 	GC9A01_Write_Cmd_Data(0x08);
- 	GC9A01_Write_Cmd_Data(0x08);
- 	GC9A01_Write_Cmd_Data(0x26);
- 	GC9A01_Write_Cmd_Data(0x2A);
-
- 	GC9A01_Write_Cmd(0xF3);
- 	GC9A01_Write_Cmd_Data(0x43);
- 	GC9A01_Write_Cmd_Data(0x70);
- 	GC9A01_Write_Cmd_Data(0x72);
- 	GC9A01_Write_Cmd_Data(0x36);
- 	GC9A01_Write_Cmd_Data(0x37);
- 	GC9A01_Write_Cmd_Data(0x6F);
-
-	GC9A01_Write_Cmd(0xED);
+	GC9A01_Write_Cmd(0xED);		
 	GC9A01_Write_Cmd_Data(0x1B);
 	GC9A01_Write_Cmd_Data(0x0B);
 
@@ -275,10 +290,10 @@ void GC9A01_Initial(void)
 	GC9A01_Write_Cmd_Data(0x08);
 	GC9A01_Write_Cmd_Data(0x03);
 
-	GC9A01_Write_Cmd(0xE8);
-	GC9A01_Write_Cmd_Data(0x34);
+	GC9A01_Write_Cmd(0xE8);		// Frame rate
+	GC9A01_Write_Cmd_Data(0x34);	
 
-	GC9A01_Write_Cmd(0x62);
+	GC9A01_Write_Cmd(0x62);		// 
 	GC9A01_Write_Cmd_Data(0x18);
 	GC9A01_Write_Cmd_Data(0x0D);
 	GC9A01_Write_Cmd_Data(0x71);
@@ -352,30 +367,30 @@ void GC9A01_Initial(void)
 	GC9A01_Write_Cmd_Data(0x3e);
 	GC9A01_Write_Cmd_Data(0x07);
 
-	GC9A01_Write_Cmd(0x35);
-	GC9A01_Write_Cmd(0x21);
+	GC9A01_Write_Cmd(0x35);		// Tearing effect line on
+	GC9A01_Write_Cmd(0x21);		// Display inversion on
 
-	GC9A01_Write_Cmd(0x11);            // Sleep Out - needs delay
+	GC9A01_Write_Cmd(0x11);            // Sleep out
 	HAL_Delay(GC9A01_SLPOUT_DELAY);    
 	GC9A01_Write_Cmd(0x29);            // Display On
 	HAL_Delay(20);
 }
 
-void GC9A01_SetPos(uint8_t Xstart, uint8_t Ystart, uint8_t Xend, uint8_t Yend)
+void GC9A01_Set_Address_Area(uint8_t Xstart, uint8_t Ystart, uint8_t Xend, uint8_t Yend)
 {
-	GC9A01_Write_Cmd(0x2A);  
+	GC9A01_Write_Cmd(0x2A); // Col address set
 	GC9A01_Write_Cmd_Data((Xstart >> 8) & 0xFF);
 	GC9A01_Write_Cmd_Data(Xstart & 0xFF);
 	GC9A01_Write_Cmd_Data((Xend >> 8) & 0xFF);
 	GC9A01_Write_Cmd_Data(Xend & 0xFF);
 
-	GC9A01_Write_Cmd(0x2B);  
+	GC9A01_Write_Cmd(0x2B); // Row address set
 	GC9A01_Write_Cmd_Data((Ystart >> 8) & 0xFF);
 	GC9A01_Write_Cmd_Data(Ystart & 0xFF);
 	GC9A01_Write_Cmd_Data((Yend >> 8) & 0xFF);
 	GC9A01_Write_Cmd_Data(Yend & 0xFF);
 
-	GC9A01_Write_Cmd(0x2C);
+	GC9A01_Write_Cmd(0x2C); // RAM write - start data transfer
 }
 
 /*****************************basic display functions end****************************************/
@@ -411,7 +426,7 @@ void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t en
         clear_window_temp_buff[i] = tempColor;
     }
 
-    GC9A01_SetPos(startX, startY, endX - 1, endY - 1);
+    GC9A01_Set_Address_Area(startX, startY, endX - 1, endY - 1);
 
     ptempBuf = (uint8_t *)clear_window_temp_buff;
     for (i = 0; i < loopNum; i++) {
@@ -434,30 +449,30 @@ void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t en
  			picture[i] = lb * 256 + hb;
  	}
  }
- 
-void GC9A01_show_picture(uint16_t *picture, uint16_t x, uint16_t y, uint8_t width, uint8_t height)
-{
-    int32_t i;
-    uint8_t *pPic;
-    uint32_t totalSize = width * height * 2;
-    uint32_t bufSize = 512;
 
-    uint32_t loopNum = (totalSize - (totalSize % bufSize)) / bufSize;
-    uint32_t modNum = totalSize % bufSize;
+// void GC9A01_show_picture(uint16_t *picture, uint16_t x, uint16_t y, uint8_t width, uint8_t height)
+// {
+//     int32_t i;
+//     uint8_t *pPic;
+//     uint32_t totalSize = width * height * 2;
+//     uint32_t bufSize = 512;
 
-    GC9A01_SetPos(x, y, (x + width) - 1, (y + height) - 1);
-    GC9A01_inversPicData(picture, width, height);
+//     uint32_t loopNum = (totalSize - (totalSize % bufSize)) / bufSize;
+//     uint32_t modNum = totalSize % bufSize;
 
-    pPic = (uint8_t *)picture;
+//     GC9A01_Set_Address_Area(x, y, (x + width) - 1, (y + height) - 1);
+//     GC9A01_inversPicData(picture, width, height);
 
-    for (i = 0; i < loopNum; i++) {
-        GC9A01_Write_Bytes(pPic + i * bufSize, bufSize);
-    }
-    GC9A01_Write_Bytes(pPic + i * bufSize, modNum);
-    GC9A01_inversPicData(picture, width, height);
+//     pPic = (uint8_t *)picture;
 
-    return;
-}
+//     for (i = 0; i < loopNum; i++) {
+//         GC9A01_Write_Bytes(pPic + i * bufSize, bufSize);
+//     }
+//     GC9A01_Write_Bytes(pPic + i * bufSize, modNum);
+//     GC9A01_inversPicData(picture, width, height);
+
+//     return;
+// }
 
  
 void GC9A01_DrawPixel(uint8_t x, uint8_t y, uint16_t color)
@@ -476,10 +491,111 @@ void GC9A01_DrawPixel(uint8_t x, uint8_t y, uint16_t color)
         tempBuf[i] = tempColor;
     }
 
-    GC9A01_SetPos(x, y, x , y );
+    GC9A01_Set_Address_Area(x, y, x , y );
 
     ptempBuf = (uint8_t *)tempBuf;
     GC9A01_Write_Bytes(ptempBuf, 8);
+}
+
+void GC9A01_SetTextColor(uint16_t color)
+{
+  lcdprop.TextColor=color;
+}
+
+void GC9A01_SetBackColor(uint16_t color)
+{
+  lcdprop.BackColor=color;
+}
+
+void GC9A01_SetFont(sFONT *pFonts)
+{
+  lcdprop.pFont=pFonts;
+}
+
+void GC9A01_DrawChar(uint16_t x, uint16_t y, uint8_t c)
+{
+  	uint32_t i = 0, j = 0;
+	uint16_t height, width;
+	uint8_t offset;
+	uint8_t *c_t;
+	uint8_t *pchar;
+	uint32_t line=0;
+
+	uint8_t *ptempbuff;
+	
+	height = lcdprop.pFont->Height;
+	width  = lcdprop.pFont->Width;
+	offset = 8 *((width + 7)/8) -  width ;
+	c_t = (uint8_t*) &(lcdprop.pFont->table[(c-' ') * lcdprop.pFont->Height * ((lcdprop.pFont->Width + 7) / 8)]);
+
+	for (i = 0; i < height * width; i++) {
+		char_temp_buff[i] = lcdprop.BackColor;
+	}
+
+	for (i = 0; i < height; i++)
+	{
+		pchar = ((uint8_t *)c_t + (width + 7)/8 * i);
+		switch (((width + 7) / 8))
+		{
+			case 1:
+				line =  pchar[0];      
+				break;
+			case 2:
+				line =  (pchar[0]<< 8) | pchar[1];
+				break;
+			case 3:
+			default:
+				line =  (pchar[0]<< 16) | (pchar[1]<< 8) | pchar[2];      
+			break;
+		}
+		for (j = 0; j < width; j++)
+		{
+			if (line & (1 << (width- j + offset- 1))) {
+				// GC9A01_DrawPixel((x + j), y, lcdprop.TextColor);
+				char_temp_buff[i * width + j] = lcdprop.TextColor;
+			}
+			else {
+				// GC9A01_DrawPixel((x + j), y, lcdprop.BackColor);
+				// char_temp_buff[i * width + j] = lcdprop.BackColor;
+			} 
+		}
+
+		y++;      
+	}
+
+	GC9A01_Set_Address_Area(x, y, x + width - 1, y + height - 1);
+	ptempbuff = (uint8_t *)char_temp_buff;
+	GC9A01_Write_Bytes(ptempbuff, height * width * 2);
+}
+
+void GC9A01_String(uint16_t x, uint16_t y, char *str) //fix bug with X_END_POS
+{
+	
+	uint8_t length = strlen(str);
+	uint8_t step = x;
+
+	if ( (length * lcdprop.pFont->Width) > (X_END_POS - x ) ){
+		for (uint8_t i = 0; i != ((((X_END_POS - x ))/lcdprop.pFont->Width)); i++) {
+			GC9A01_DrawChar(step, y, str[i]);
+			step += lcdprop.pFont->Width;
+		}
+	} else {		
+		while (*str)
+		{
+			GC9A01_DrawChar(x,y,str[0]);
+			x+=lcdprop.pFont->Width;
+			(void)*str++;
+		}
+	}
+}
+
+uint8_t check_lenght_of_the_next_word(char *str){
+	uint8_t lenght = 0;
+	while(*str != ' ' && *str != '\0'){
+		str++;
+		lenght++;
+	}
+	return lenght;
 }
 
 
@@ -516,8 +632,6 @@ void GC9A01_draw_line(uint16_t color, uint16_t x1, uint16_t y1, uint16_t x2, uin
         }
     }
 }
-
-
 
 
 void GC9A01_DrawRect(uint16_t color, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
@@ -849,127 +963,40 @@ void GC9A01_GradientScale(uint32_t min_value,uint32_t max_value, uint32_t value)
 }
 */
 
-void GC9A01_SetTextColor(uint16_t color)
-{
-  lcdprop.TextColor=color;
-}
-
-void GC9A01_SetBackColor(uint16_t color)
-{
-  lcdprop.BackColor=color;
-}
-
-void GC9A01_SetFont(sFONT *pFonts)
-{
-  lcdprop.pFont=pFonts;
-}
-
-void GC9A01_DrawChar(uint16_t x, uint16_t y, uint8_t c)
-{
-  uint32_t i = 0, j = 0;
-  uint16_t height, width;
-  uint8_t offset;
-  uint8_t *c_t;
-  uint8_t *pchar;
-  uint32_t line=0;
-  height = lcdprop.pFont->Height;
-  width  = lcdprop.pFont->Width;
-  offset = 8 *((width + 7)/8) -  width ;
-  c_t = (uint8_t*) &(lcdprop.pFont->table[(c-' ') * lcdprop.pFont->Height * ((lcdprop.pFont->Width + 7) / 8)]);
-  for(i = 0; i < height; i++)
-  {
-    pchar = ((uint8_t *)c_t + (width + 7)/8 * i);
-    switch(((width + 7)/8))
-    {
-      case 1:
-          line =  pchar[0];      
-          break;
-      case 2:
-          line =  (pchar[0]<< 8) | pchar[1];
-          break;
-      case 3:
-      default:
-        line =  (pchar[0]<< 16) | (pchar[1]<< 8) | pchar[2];      
-        break;
-    }
-    for (j = 0; j < width; j++)
-    {
-      if(line & (1 << (width- j + offset- 1))) 
-      {
-        GC9A01_DrawPixel((x + j), y, lcdprop.TextColor);
-      }
-      else
-      {
-        GC9A01_DrawPixel((x + j), y, lcdprop.BackColor);
-      } 
-    }
-    y++;      
-  }
-}
-
-void GC9A01_String(uint16_t x,uint16_t y, char *str) //fix bug with X_END_POS
-{
+// void GC9A01_Text(char *str, uint8_t page) {
 	
-	uint8_t lenght = strlen(str);
-	uint8_t step = x;
-	if((lenght ) * lcdprop.pFont->Width > (X_END_POS - x ) ){
-		for(uint8_t i = 0; i != ((((X_END_POS - x )  )/lcdprop.pFont->Width)); i++){
-			GC9A01_DrawChar(step,y,str[i]);
-			step+=lcdprop.pFont->Width;
-		}
-	}else{		
-  while(*str)
-  {
-    GC9A01_DrawChar(x,y,str[0]);
-    x+=lcdprop.pFont->Width;
-    (void)*str++;
-  }
-}
-}
+//     GC9A01_ClearScreen(WHITE);
+//     GC9A01_SetBackColor(default_background_color);
+//     GC9A01_SetFont(&Font16);
+//     GC9A01_SetTextColor(default_text_color);
 
-uint8_t check_lenght_of_the_next_word(char *str){
-	uint8_t lenght = 0;
-	while(*str != ' ' && *str != '\0'){
-		str++;
-		lenght++;
-	}
-	return lenght;
-}
+//     uint8_t text_start_pos = OUT_TEXT_LEFT_INDENTATION;
+//     uint8_t text_end_pos = OUT_TEXT_RIGHT_INDENTATION;
+//     uint8_t max_chars_per_line = (LCD_W - text_start_pos - text_end_pos) / lcdprop.pFont->Width;
+//     uint8_t max_lines = (LCD_W - text_start_pos - text_end_pos) / lcdprop.pFont->Height + 1;
+//     uint8_t max_capacity = max_chars_per_line * max_lines;
 
-void GC9A01_Text(char *str, uint8_t page) {
-	
-    GC9A01_ClearScreen(WHITE);
-    GC9A01_SetBackColor(default_background_color);
-    GC9A01_SetFont(&Font16);
-    GC9A01_SetTextColor(default_text_color);
+//     str += max_capacity * (page - 1);
 
-    uint8_t text_start_pos = OUT_TEXT_LEFT_INDENTATION;
-    uint8_t text_end_pos = OUT_TEXT_RIGHT_INDENTATION;
-    uint8_t max_chars_per_line = (LCD_W - text_start_pos - text_end_pos) / lcdprop.pFont->Width;
-    uint8_t max_lines = (LCD_W - text_start_pos - text_end_pos) / lcdprop.pFont->Height + 1;
-    uint8_t max_capacity = max_chars_per_line * max_lines;
-
-    str += max_capacity * (page - 1);
-
-    while (*str) {
-        for (uint8_t i = 0; i < max_chars_per_line && *str; i++) {
-            if (*str == '\n') { 
-                text_end_pos += lcdprop.pFont->Height;
-                str++;
-                break;
-            } else {
-                GC9A01_DrawChar(text_start_pos, text_end_pos, *str);
-               text_start_pos += lcdprop.pFont->Width;
-                str++;
-            }
-        }
-        text_end_pos += lcdprop.pFont->Height;
-        text_start_pos = OUT_TEXT_LEFT_INDENTATION;
-        if (text_end_pos > (LCD_W - OUT_TEXT_RIGHT_INDENTATION)) {
-            break;
-        }
-    }
-}
+//     while (*str) {
+//         for (uint8_t i = 0; i < max_chars_per_line && *str; i++) {
+//             if (*str == '\n') { 
+//                 text_end_pos += lcdprop.pFont->Height;
+//                 str++;
+//                 break;
+//             } else {
+//                 GC9A01_DrawChar(text_start_pos, text_end_pos, *str);
+//                text_start_pos += lcdprop.pFont->Width;
+//                 str++;
+//             }
+//         }
+//         text_end_pos += lcdprop.pFont->Height;
+//         text_start_pos = OUT_TEXT_LEFT_INDENTATION;
+//         if (text_end_pos > (LCD_W - OUT_TEXT_RIGHT_INDENTATION)) {
+//             break;
+//         }
+//     }
+// }
 /*
 void GC9A01_Rainbow_String(uint16_t x,uint16_t y, char *str)
 {

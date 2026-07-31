@@ -129,8 +129,8 @@
 
 /********************TEXT STYLE**********************/
 #define default_text_color BLACK
-#define default_background_color WHITE
-#define default_active_color GREEN
+#define default_background_color BLACK
+#define default_active_color WHITE
 #define default_font &Font16
 /****************************************************/
 
@@ -180,7 +180,7 @@ typedef struct
 	sFONT *pFont;
 }GC9A01_DrawPropTypeDef;
 
-
+// Set the draw orientation of display using 0-3 (GC9A01_TOP, BOTTOM, LEFT, RIGHT)
 void GC9A01_Set_Orientation(uint8_t orientation);
 
 
@@ -194,15 +194,28 @@ void GC9A01_Write_Data_U16(uint16_t y);
 void GC9A01_Write_Data(uint8_t DH,uint8_t DL);
 void GC9A01_Initial(void);
 
+// Clear the entire screen with a specific color
 void GC9A01_ClearScreen(uint16_t bColor);
+
+// Clear a specific window on the screen with a specific color
 void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t endY, uint16_t bColor);
-void GC9A01_SetPos(uint8_t Xstart, uint8_t Ystart, uint8_t Xend, uint8_t Yend);
-void GC9A01_show_picture(uint16_t *picture, uint16_t x,uint16_t y, uint8_t widht, uint8_t height);
+
+// Set the address (row & col) area for mcu access on subsequent write commands
+void GC9A01_Set_Address_Area(uint8_t Xstart, uint8_t Ystart, uint8_t Xend, uint8_t Yend);
+
+
+// void GC9A01_show_picture(uint16_t *picture, uint16_t x,uint16_t y, uint8_t widht, uint8_t height);
 void GC9A01_DrawPixel(uint8_t x, uint8_t y, uint16_t color);
+
+void GC9A01_SetTextColor(uint16_t color);
+void GC9A01_SetBackColor(uint16_t color);
+void GC9A01_SetFont(sFONT *pFonts);
+void GC9A01_DrawChar(uint16_t x, uint16_t y, uint8_t c);
+void GC9A01_String(uint16_t x,uint16_t y, char *str);
+
 void GC9A01_draw_line(uint16_t color, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t thickness);
 void GC9A01_DrawRect(uint16_t color, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
 void GC9A01_DrawCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color);
-
 void DrawArrow(int16_t angle, uint8_t lineLen, uint8_t thick, uint16_t color);
 void DrawLineAroundTheCircle(int16_t angle, uint8_t r1,uint8_t r2, uint8_t thick, uint16_t color);
 void GC9A01A_FillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
@@ -221,12 +234,7 @@ void GC9A01_DrawCircleArountTheCircle(uint16_t start_pos,	int16_t angle, 							
 // void GC9A01_GradientScale(uint32_t min_value,uint32_t max_value, uint32_t value);
 void GC9A01_FillCircleFast(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color);
 
-void GC9A01_SetTextColor(uint16_t color);
-void GC9A01_SetBackColor(uint16_t color);
-void GC9A01_SetFont(sFONT *pFonts);
-void GC9A01_DrawChar(uint16_t x, uint16_t y, uint8_t c);
-void GC9A01_String(uint16_t x,uint16_t y, char *str);
-void GC9A01_Text(char *str,uint8_t page);
+// void GC9A01_Text(char *str,uint8_t page);
 // void GC9A01_Rainbow_String(uint16_t x,uint16_t y, char *str);
 // void ShowMenu(struct MenuMember Members[AMOUNT_OF_MENU_MEMBERS - 1],uint8_t page_num);
 // void refresh_menu_member(struct MenuMember Members, uint8_t pos);

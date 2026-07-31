@@ -50,7 +50,7 @@ const osThreadAttr_t defaultTask_attributes = {
 
 #define SYSTEM_STATE_TASK_DELAY 10
 #define ENCODER_TASK_DELAY 100
-#define ACCELEROMETER_TASK_DELAY 100
+#define ACCELEROMETER_TASK_DELAY 50
 
 #define SYSTEM_STATE_TASK_STACK_SIZE 1024 * 4
 #define ENCODER_TASK_STACK_SIZE 512 * 4
@@ -393,21 +393,23 @@ void DrawChronoStateFace(void) {
   char chrono_buffer[20];
   snprintf(chrono_buffer, sizeof(chrono_buffer), "Timer: 00:00");
   // GC9A01_String(20, 120, "Chronograph State");
-  GC9A01_String(20, 120, chrono_buffer);
+  GC9A01_String(20, 80, chrono_buffer);
 }
 
 void SystemStateTask(void *argument) {
 
-  uint8_t redraw = 0;
+  uint8_t redraw = 1;
 
   char x_value_buffer[20] = "X: 0";
 
   SystemStateTaskArgs *args = (SystemStateTaskArgs *)argument;
   osMessageQueueId_t encoderQueue = args->encoderQueue;
   osMessageQueueId_t accelerometerQueue = args->accelerometerQueue;
-
+  
   SystemState current_state = STATE_WATCH;
 
+  uint8_t orientation = GC9A01_TOP; // Default orientation
+  
   GC9A01_ClearScreen(BLACK);
 
   for (;;) {
@@ -426,14 +428,23 @@ void SystemStateTask(void *argument) {
     }
 
     int16_t accelerometer_data;
+
     if (osMessageQueueGet(accelerometerQueue, &accelerometer_data, NULL, 100) == osOK) {
         // redraw = 1;
         snprintf(x_value_buffer, sizeof(x_value_buffer), "X: %d", accelerometer_data);
         
         if (accelerometer_data < 0) {
-          GC9A01_Set_Orientation(GC9A01_TOP);
+          if (orientation != GC9A01_TOP) {
+            GC9A01_Set_Orientation(GC9A01_TOP);
+            redraw = 1;
+            orientation = GC9A01_TOP;
+          }
         } else {
-          GC9A01_Set_Orientation(GC9A01_BOTTOM);
+          if (orientation != GC9A01_BOTTOM) {
+            GC9A01_Set_Orientation(GC9A01_BOTTOM);
+            redraw = 1;
+            orientation = GC9A01_BOTTOM;
+          }
         }
     }
 
