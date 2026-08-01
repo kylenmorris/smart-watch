@@ -183,7 +183,8 @@ typedef struct
 // Set the draw orientation of display using 0-3 (GC9A01_TOP, BOTTOM, LEFT, RIGHT)
 void GC9A01_Set_Orientation(uint8_t orientation);
 
-
+void GC9A01_Sleep(void);
+void GC9A01_WakeUp(void);
 
 void SPI_write(uint8_t data);
 void GC9A01_Write_Bytes(uint8_t * pbuff, uint16_t size);

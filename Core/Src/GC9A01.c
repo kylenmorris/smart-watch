@@ -6,6 +6,7 @@
 #include "stdlib.h"
 #include "stm32l4xx_ll_spi.h"
 #include "stdio.h"
+#include "cmsis_os2.h"
 
 //https://github.com/yaroslav8765
 volatile GC9A01_DrawPropTypeDef lcdprop;
@@ -97,6 +98,27 @@ void GC9A01_Write_Data(uint8_t DH,uint8_t DL)
   SPI_write(DL);
 
 	LCD_CS_1;
+}
+
+void GC9A01_Sleep(void)
+{
+	// GC9A01_Write_Cmd(0x53); // write ctrl display
+	// GC9A01_Write_Cmd_Data(0x00); // display back light off
+
+	GC9A01_Write_Cmd(GC9A01_SLPIN);
+	osDelay(GC9A01_SLPIN_DELAY);
+}
+
+void GC9A01_WakeUp(void)
+{
+	GC9A01_Write_Cmd(GC9A01_SLPOUT);
+	osDelay(GC9A01_SLPOUT_DELAY);
+
+	GC9A01_Write_Cmd(0x53); // write ctrl display
+	GC9A01_Write_Cmd_Data(0x2C); // display on
+
+	GC9A01_Write_Cmd(GC9A01_DISPON);
+
 }
 
 void GC9A01_Set_Orientation(uint8_t orientation)

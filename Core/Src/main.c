@@ -14,6 +14,7 @@
 #include "GC9A01.h"
 #include "fonts.h"
 #include "math.h"
+#include "stm32l4xx_hal_pwr.h"
 #include "string.h"
 #include "stdlib.h"
 /* USER CODE END Includes */
@@ -53,8 +54,12 @@ const osThreadAttr_t defaultTask_attributes = {
 #define ACCEL_Z 2
 
 #define EVENT_REDRAW_DISPLAY (1U << 0)
+#define EVENT_ENTER_SLEEP_MODE (1U << 1)
+#define EVENT_WAKE_UP_FROM_SLEEP (1U << 2)
 
 #define DISPLAY_REDRAW_PERIOD 1000
+
+#define TIME_TO_SLEEP 3000
 
 #define SYSTEM_STATE_TASK_DELAY 10
 #define ENCODER_TASK_DELAY 100
@@ -118,11 +123,21 @@ SystemStateTaskArgs systemStateTaskArgs = {
   .displayState = &displayState
 };
 
+// ############## Sleep Task ################
+
+typedef struct {
+  osEventFlagsId_t eventFlags;
+  osTimerId_t sleepTimerHandle;
+} SleepTaskArgs;
+
+SleepTaskArgs sleepTaskArgs;
+
 // ############## Encoder Task ################
 
 typedef struct {
   I2C_HandleTypeDef *hi2c;
   osMessageQueueId_t queue;
+  osTimerId_t sleepTimerHandle;
 } EncoderTaskArgs;
 
 EncoderTaskArgs encoderTaskArgs = {
@@ -148,6 +163,7 @@ osThreadId_t systemStateTaskHandle;
 osThreadId_t encoderTaskHandle;
 osThreadId_t accelerometerTaskHandle;
 osThreadId_t displayTaskHandle;
+osThreadId_t sleepTaskHandle;
 
 // ############## Task Attributes ################
 
@@ -175,10 +191,16 @@ const osThreadAttr_t accelerometerTask_attributes = {
   .priority = ACCELEROMETER_TASK_PRIORITY,
 };
 
-
+const osThreadAttr_t sleepTask_attributes = {
+  .name = "sleepTask",
+  .stack_size = 512 * 4,
+  .priority = osPriorityNormal2,
+};
 
 volatile uint8_t accel_interrupt_flag; 
+
 volatile uint8_t dma_spi_fl1 = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -206,13 +228,18 @@ void SystemStateTask(void *argument);
 void AccelerometerTask(void *argument);
 void DisplayTask(void *argument);
 void EncoderTask(void *argument);
+void SleepTask(void *argument);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 
 void TimerCallback(void *argument) {
-  osEventFlagsSet(displayTaskArgs.eventFlags, EVENT_REDRAW_DISPLAY);
+  osEventFlagsSet(systemStateTaskArgs.eventFlags, EVENT_REDRAW_DISPLAY);
+}
+
+void SleepTimerCallback(void *argument) {
+  osEventFlagsSet(systemStateTaskArgs.eventFlags, EVENT_ENTER_SLEEP_MODE);
 }
 
 /**
@@ -285,6 +312,12 @@ int main(void)
   /* USER CODE BEGIN RTOS_TIMERS */
   osTimerId_t displayTimerHandle = osTimerNew(TimerCallback, osTimerPeriodic, NULL, NULL);
   systemStateTaskArgs.timerHandle = displayTimerHandle;
+
+  osTimerId_t sleepTimerHandle = osTimerNew(SleepTimerCallback, osTimerPeriodic, NULL, NULL);
+  encoderTaskArgs.sleepTimerHandle = sleepTimerHandle;
+  sleepTaskArgs.sleepTimerHandle = sleepTimerHandle;
+
+  osTimerStart(sleepTimerHandle, TIME_TO_SLEEP); 
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -297,13 +330,14 @@ int main(void)
   /* Create the thread(s) */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
   /* creation of defaultTask */
-  
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   osEventFlagsId_t eventFlagsHandle = osEventFlagsNew(NULL);
   displayTaskArgs.eventFlags = eventFlagsHandle;
+  sleepTaskArgs.eventFlags = eventFlagsHandle;
   systemStateTaskArgs.eventFlags = eventFlagsHandle;
   /* USER CODE END RTOS_EVENTS */
 
@@ -413,6 +447,43 @@ void PollI2CDevices(void) {
 //     osDelay(10);
 //   }
 // }
+
+void SleepTask(void *argument) {
+
+  SleepTaskArgs *args = (SleepTaskArgs *)argument;
+  osEventFlagsId_t eventFlags = args->eventFlags;
+  osTimerId_t sleepTimer = args->sleepTimerHandle;
+
+  for (;;) {
+    osEventFlagsWait(eventFlags, EVENT_ENTER_SLEEP_MODE, osFlagsWaitAny, osWaitForever);
+    
+
+    GC9A01_ClearScreen(BLACK);
+    GC9A01_String(40, 120, "Entering Sleep Mode...");
+    GC9A01_Sleep();
+
+    HAL_SuspendTick();
+
+    // Enter Stop2 with wake from interrupt
+    HAL_PWREx_EnterSTOP2Mode(PWR_STOPENTRY_WFI);
+
+    HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+    // osEventFlagsWait(eventFlags, EVENT_WAKE_UP_FROM_SLEEP, osFlagsWaitAny, osWaitForever);
+    // osEventFlagsClear(eventFlags, EVENT_WAKE_UP_FROM_SLEEP);
+
+    // Resume the systick to allow interrupts and waking of mcu
+    HAL_ResumeTick();
+
+    // Reconfigure the system clock
+    SystemClock_Config();
+
+    GC9A01_WakeUp();
+
+    osEventFlagsClear(eventFlags, EVENT_ENTER_SLEEP_MODE);
+
+    osTimerStart(sleepTimer, TIME_TO_SLEEP);
+  }
+}
 
 typedef enum {
   STATE_WATCH,
@@ -592,6 +663,7 @@ void EncoderReadTask(void *argument) {
   
   osMessageQueueId_t encoderQueue = args->queue;
   I2C_HandleTypeDef *hi2c = args->hi2c;
+  osTimerId_t sleepTimerHandle = args->sleepTimerHandle;
 
   for (;;) {
 
@@ -606,6 +678,7 @@ void EncoderReadTask(void *argument) {
 
     if (encoder_delta != 0) {
       osMessageQueuePut(encoderQueue, &encoder_delta, 0, 0);
+      osTimerStart(sleepTimerHandle, TIME_TO_SLEEP); // Reset sleep timer on encoder activity
     }
 
     osDelay(100);
@@ -648,6 +721,8 @@ void StartDefaultTask(void *argument)
     osThreadNew(AccelerometerReadTask, &accelerometerTaskArgs, &accelerometerTask_attributes);
     osThreadNew(EncoderReadTask, &encoderTaskArgs, &encoderTask_attributes);
     osThreadNew(SystemStateTask, &systemStateTaskArgs, &systemStateTask_attributes);
+    osThreadNew(SleepTask, &sleepTaskArgs, &sleepTask_attributes);
+    // osThreadNew(WakeUpTask, &wakeUpTaskArgs, NULL);
     // osThreadNew(ChronoTask, NULL, NULL);
     // osThreadNew(GameTask, NULL, NULL);
 
