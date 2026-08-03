@@ -9,6 +9,7 @@
 #include <stdio.h>
 // #include "st7789.h"
 #include "LSM6DSO.h"
+#include "cmsis_os2.h"
 #include "seesaw_driver.h"
 #include "stm32l4xx_hal_def.h"
 #include "GC9A01.h"
@@ -82,7 +83,7 @@ const osThreadAttr_t defaultTask_attributes = {
 
 #define DISPLAY_REDRAW_PERIOD 1000
 
-#define TIME_TO_SLEEP 10000
+#define TIME_TO_SLEEP 100000
 
 
 // ########### Display State Management ################
@@ -92,6 +93,7 @@ typedef struct {
   RTC_TimeTypeDef current_time;
   RTC_DateTypeDef current_date;
   uint8_t orientation;
+  float battery_voltage;
 } DisplayState;
 
 DisplayState displayState = {
@@ -515,17 +517,25 @@ void DrawWatchStateFace(DisplayState *displayState) {
   
   char time_buffer[20];
   char date_buffer[20];
+  char batt_buffer[20];
 
   RTC_TimeTypeDef sTime = displayState->current_time;
   RTC_DateTypeDef sDate = displayState->current_date;
 
+  uint8_t dec = displayState->battery_voltage;
+  uint8_t frac = (displayState->battery_voltage - dec) * 100;
+
   snprintf(time_buffer, sizeof(time_buffer), "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
   snprintf(date_buffer, sizeof(date_buffer), "%02d/%02d/%04d", sDate.Month, sDate.Date, sDate.Year);
+  snprintf(batt_buffer, sizeof(batt_buffer), "%d.%02dV", dec, frac);
   
   GC9A01_ClearScreen(BLACK);
 
-  GC9A01_String(40, 120, time_buffer);
-  GC9A01_String(40, 150, date_buffer);
+  GC9A01_SetFont(&Font12);
+  GC9A01_String(40, 40, batt_buffer);
+  GC9A01_SetFont(&Font24);
+  GC9A01_String(40, 80, time_buffer);
+  GC9A01_String(40, 100, date_buffer);
 }
 
 void DrawChronoStateFace(DisplayState *displayState) {
@@ -579,6 +589,28 @@ void DisplayTask(void *argument) {
 
     osDelay(DISPLAY_TASK_DELAY);
 
+  }
+}
+
+void BatteryTask(void *argument) {
+  SystemStateTaskArgs *args = (SystemStateTaskArgs *)argument;
+  osMutexId_t systemStateMutex = args->systemStateMutex;
+  DisplayState *displayState = args->displayState;
+
+  for (;;) {
+    if (HAL_ADC_Start(&hadc1) != HAL_OK) {
+      continue; 
+    }
+    HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+    uint32_t batt_raw = HAL_ADC_GetValue(&hadc1);
+    float v_node = (batt_raw / 4095.0f) * 3.3f;
+    float v_batt = v_node * 2.0f; // halved for adc
+
+    osMutexAcquire(systemStateMutex, SYSTEM_STATE_TASK_WAIT);
+    displayState->battery_voltage = v_batt;
+    osMutexRelease(systemStateMutex);
+
+    osDelay(1000);
   }
 }
 
@@ -640,7 +672,9 @@ void SystemStateTask(void *argument) {
     }
 
     osMutexAcquire(systemStateMutex, SYSTEM_STATE_TASK_WAIT);
-    *displayState = local_display_state;
+    displayState->current_state = local_display_state.current_state;
+    displayState->current_time = local_display_state.current_time;
+    displayState->current_date = local_display_state.current_date;
     osMutexRelease(systemStateMutex);
 
     uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
@@ -758,6 +792,7 @@ void StartDefaultTask(void *argument)
     osThreadNew(EncoderReadTask, &encoderTaskArgs, &encoderTask_attributes);
     osThreadNew(SystemStateTask, &systemStateTaskArgs, &systemStateTask_attributes);
     osThreadNew(SleepTask, &sleepTaskArgs, &sleepTask_attributes);
+    osThreadNew(BatteryTask, &systemStateTaskArgs, NULL);
     // osThreadNew(WakeUpTask, &wakeUpTaskArgs, NULL);
     // osThreadNew(ChronoTask, NULL, NULL);
     // osThreadNew(GameTask, NULL, NULL);
