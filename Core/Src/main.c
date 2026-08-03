@@ -43,7 +43,7 @@ UART_HandleTypeDef huart2;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 1024 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
@@ -57,30 +57,31 @@ const osThreadAttr_t defaultTask_attributes = {
 #define EVENT_ENTER_SLEEP_MODE (1U << 1)
 #define EVENT_WAKE_UP_FROM_SLEEP (1U << 2)
 
-#define DISPLAY_REDRAW_PERIOD 1000
-
-#define TIME_TO_SLEEP 3000
-
-#define SYSTEM_STATE_TASK_DELAY 10
-#define ENCODER_TASK_DELAY 100
-#define DISPLAY_TASK_DELAY 20
-#define ACCELEROMETER_TASK_DELAY 20
-
-#define SYSTEM_STATE_TASK_STACK_SIZE 1024 * 4
-#define ENCODER_TASK_STACK_SIZE 512 * 4
-#define DISPLAY_TASK_STACK_SIZE 512 * 4
-#define ACCELEROMETER_TASK_STACK_SIZE 512 * 4
+#define SYSTEM_STATE_TASK_STACK_SIZE 256 * 4
+#define ENCODER_TASK_STACK_SIZE 256 * 4         
+#define DISPLAY_TASK_STACK_SIZE 256 * 4         // needed 96 * 4 last check
+#define ACCELEROMETER_TASK_STACK_SIZE 256 * 4
 
 #define SYSTEM_STATE_TASK_PRIORITY osPriorityNormal
 #define ENCODER_TASK_PRIORITY osPriorityNormal
 #define DISPLAY_TASK_PRIORITY osPriorityNormal
 #define ACCELEROMETER_TASK_PRIORITY osPriorityNormal1
 
+// ############ Wait Periods etc ################
+
 #define SYSTEM_STATE_TASK_WAIT 50
 #define DISPLAY_TASK_WAIT 50
 #define ENCODER_TASK_WAIT 50
 
-int16_t accel_data_global[3];
+#define SYSTEM_STATE_TASK_DELAY 10
+#define ENCODER_TASK_DELAY 100
+#define DISPLAY_TASK_DELAY 20
+#define ACCELEROMETER_TASK_DELAY 20
+
+#define DISPLAY_REDRAW_PERIOD 1000
+
+#define TIME_TO_SLEEP 10000
+
 
 // ########### Display State Management ################
 
@@ -197,6 +198,7 @@ const osThreadAttr_t sleepTask_attributes = {
   .priority = osPriorityNormal2,
 };
 
+int16_t accel_data_global[3];
 volatile uint8_t accel_interrupt_flag; 
 
 volatile uint8_t dma_spi_fl1 = 0;
@@ -390,35 +392,49 @@ void InitEncoder(void) {
 
 }
 
+void AccelerometerLowPower(void) {
+  uint16_t reg = CTRL5_C;
+  uint8_t accel_sleep_data = 0x80; // XL_ULP_EN = 1
+  write_to_accel(&hi2c1, reg, &accel_sleep_data, 1);
+}
+
 void InitAccelerometer(void) {
   
-  uint8_t accel_init_data = 0x40; // 104 kHz, 2g
-  uint16_t reg = CTRL1_XL;
-  write_to_accel(&hi2c1, reg, &accel_init_data, 1);
+  uint16_t reg;
+  uint8_t data;
+  
+  reg = CTRL6_C;
+  data = 0x10; // disable high-performance mode = 1
+  write_to_accel(&hi2c1, reg, &data, 1);
+  
+  reg = CTRL1_XL;
+  data = 0x30; // 52Hz, 2h, high-resolution selection = 0 
+  write_to_accel(&hi2c1, reg, &data, 1);
 
-  uint8_t tap_init_data = 0x08; // enable double-tap detection on int2
-  reg = MD2_CFG;
-  write_to_accel(&hi2c1, reg, &tap_init_data, 1);
+  reg = MD1_CFG;
+  data = 0x08; // enable double-tap detection interrupt
+  write_to_accel(&hi2c1, reg, &data, 1);
 
-  uint8_t tap_dir = 0x02; // z axis
   reg = TAP_CFG0;
-  write_to_accel(&hi2c1, reg, &tap_dir, 1);
+  data = 0x02;       // z axis tap
+  write_to_accel(&hi2c1, reg, &data, 1);
 
-  uint8_t tap_ths = 0x80; // enable interrupts
   reg = TAP_CFG2;
-  write_to_accel(&hi2c1, reg, &tap_ths, 1);
+  data = 0x80;       // enable interrupts
+  write_to_accel(&hi2c1, reg, &data, 1);
 
-  uint8_t tap_dur2 = 0x10; 
   reg = TAP_THS_6D;
-  write_to_accel(&hi2c1, reg, &tap_dur2, 1);
+  data = 0x10; 
+  write_to_accel(&hi2c1, reg, &data, 1);
 
-  uint8_t tap_en = 0x80; // enable double-tap detection
-  reg = WAKE_UP_THS;
-  write_to_accel(&hi2c1, reg, &tap_en, 1);
-
-  uint8_t tap_dur = 0x2A; // ~600ms double tap delay, 2 quiet, 2 shock
   reg = INT_DUR2;
-  write_to_accel(&hi2c1, reg, &tap_dur, 1);
+  data = 0x2A; // ~600ms double tap delay, 2 quiet, 2 shock
+  write_to_accel(&hi2c1, reg, &data, 1);
+
+  reg = WAKE_UP_THS;
+  data = 0x80; // enable double-tap detection
+  write_to_accel(&hi2c1, reg, &data, 1);
+
 
 }
 
@@ -520,12 +536,15 @@ void DrawChronoStateFace(DisplayState *displayState) {
 
 void DisplayTask(void *argument) {
 
+  UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+
   DisplayTaskArgs *args = (DisplayTaskArgs *)argument;
   osMutexId_t systemStateMutex = args->systemStateMutex;
   DisplayState *displayState = args->displayState;
   osEventFlagsId_t eventFlags = args->eventFlags;
  
   DisplayState local_display_state;
+
 
   for (;;) {
 
@@ -552,12 +571,16 @@ void DisplayTask(void *argument) {
         break;
     }
 
+    uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+
     osDelay(DISPLAY_TASK_DELAY);
 
   }
 }
 
 void SystemStateTask(void *argument) {
+
+  UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
 
   SystemStateTaskArgs *args = (SystemStateTaskArgs *)argument;
   osMessageQueueId_t encoderQueue = args->encoderQueue;
@@ -616,6 +639,7 @@ void SystemStateTask(void *argument) {
     *displayState = local_display_state;
     osMutexRelease(systemStateMutex);
 
+    uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
     osDelay(SYSTEM_STATE_TASK_DELAY);
   }
 }
@@ -629,6 +653,8 @@ void ChronoTask(void *argument) {
 }
 
 void AccelerometerReadTask(void *argument) {
+
+  UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
 
   AccelerometerTaskArgs *args = (AccelerometerTaskArgs *)argument;
   osMutexId_t accelMutex = args->accelMutex;
@@ -653,11 +679,14 @@ void AccelerometerReadTask(void *argument) {
     accel_data_global[ACCEL_Z] = z;
     osMutexRelease(accelMutex);
 
+    uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
     osDelay(ACCELEROMETER_TASK_DELAY);
   }
 }
 
 void EncoderReadTask(void *argument) {
+
+  UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
 
   EncoderTaskArgs *args = (EncoderTaskArgs *)argument;
   
@@ -681,6 +710,7 @@ void EncoderReadTask(void *argument) {
       osTimerStart(sleepTimerHandle, TIME_TO_SLEEP); // Reset sleep timer on encoder activity
     }
 
+    uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
     osDelay(100);
   }
 
@@ -689,6 +719,8 @@ void EncoderReadTask(void *argument) {
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
+
+  UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
 
   /* Infinite loop */
   for (;;)
@@ -729,7 +761,7 @@ void StartDefaultTask(void *argument)
     // printf("Initialization complete. Entering main loop...\n");
 
     // osThreadStop(defaultTaskHandle); // Stop the default task after initialization
-
+    uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
     osThreadTerminate(defaultTaskHandle); // Terminate the default task after initialization
 
     // osDelay(1000);

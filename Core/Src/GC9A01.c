@@ -15,8 +15,8 @@ volatile uint8_t shift = 0;
 volatile colors current_text_color;
 uint16_t gradient_scale_current_pos = 0;
 
-uint16_t clear_window_temp_buff[256]; 
-uint16_t show_picture_temp_buff[512];
+// uint16_t clear_window_temp_buff[256]; 
+// uint16_t show_picture_temp_buff[512];
 uint16_t char_temp_buff[408];
 
 /************************************basic display fuctions start************************************/
@@ -102,9 +102,6 @@ void GC9A01_Write_Data(uint8_t DH,uint8_t DL)
 
 void GC9A01_Sleep(void)
 {
-	// GC9A01_Write_Cmd(0x53); // write ctrl display
-	// GC9A01_Write_Cmd_Data(0x00); // display back light off
-
 	GC9A01_Write_Cmd(GC9A01_SLPIN);
 	osDelay(GC9A01_SLPIN_DELAY);
 }
@@ -114,8 +111,8 @@ void GC9A01_WakeUp(void)
 	GC9A01_Write_Cmd(GC9A01_SLPOUT);
 	osDelay(GC9A01_SLPOUT_DELAY);
 
-	GC9A01_Write_Cmd(0x53); // write ctrl display
-	GC9A01_Write_Cmd_Data(0x2C); // display on
+	GC9A01_Write_Cmd(GC9A01_CTRLDISP); 
+	GC9A01_Write_Cmd_Data(0x2C); 		// display on
 
 	GC9A01_Write_Cmd(GC9A01_DISPON);
 
@@ -437,7 +434,7 @@ void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t en
     uint16_t tempColor = lb * 256 + hb;
 
     uint32_t totalSize = (endX - startX) * (endY - startY) * 2;
-    uint32_t bufSize = 256;
+    uint32_t bufSize = 408;
     uint32_t loopNum = (totalSize - (totalSize % bufSize)) / bufSize;
     uint32_t modNum = totalSize % bufSize;
 
@@ -445,12 +442,12 @@ void GC9A01_ClearWindow(uint8_t startX, uint8_t startY, uint8_t endX, uint8_t en
     uint8_t *ptempBuf;
 
     for (i = 0; i < bufSize; i++) {
-        clear_window_temp_buff[i] = tempColor;
+        char_temp_buff[i] = tempColor;
     }
 
     GC9A01_Set_Address_Area(startX, startY, endX - 1, endY - 1);
 
-    ptempBuf = (uint8_t *)clear_window_temp_buff;
+    ptempBuf = (uint8_t *)char_temp_buff;
     for (i = 0; i < loopNum; i++) {
         GC9A01_Write_Bytes(ptempBuf, bufSize);
     }
